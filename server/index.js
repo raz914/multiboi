@@ -261,8 +261,15 @@ io.on('connection', (socket) => {
   })
 })
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] Socket.IO listening on port ${PORT}`) // eslint-disable-line no-console
+  console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`) // eslint-disable-line no-console
+  console.log(`[Server] CORS origins: ${JSON.stringify(CLIENT_ORIGIN)}`) // eslint-disable-line no-console
+})
+
+httpServer.on('error', (error) => {
+  console.error('[Server] Error starting server:', error) // eslint-disable-line no-console
+  process.exit(1)
 })
 
 

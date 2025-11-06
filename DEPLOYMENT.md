@@ -161,6 +161,26 @@ CLIENT_ORIGIN=http://localhost:5173,https://your-netlify-app.netlify.app
 
 ## Troubleshooting
 
+### Server returns 502 "Application failed to respond" error
+
+**Problem**: Railway server isn't starting or binding to the correct address.
+
+**Solution**:
+1. **Check Railway logs**: Go to your Railway service → Deployments → Click on the latest deployment → View logs
+2. **Verify root directory**: Make sure Railway's root directory is set to `server` (Settings → Root Directory)
+3. **Check environment variables**: Ensure `CLIENT_ORIGIN` is set correctly
+4. **Verify server is listening**: The server should bind to `0.0.0.0` (already configured in `server/index.js`)
+5. **Check PORT**: Railway automatically sets `PORT` environment variable - the server uses this
+6. **Common issues**:
+   - Server crashed on startup (check logs for errors)
+   - Wrong root directory (should be `server`, not root)
+   - Missing dependencies (check if `npm install` completed successfully)
+
+**Debug steps**:
+- Check Railway deployment logs for startup errors
+- Verify the server starts locally: `cd server && npm start`
+- Test the health endpoint: Visit `https://your-railway-url.railway.app/` - should return JSON
+
 ### Build fails with "Node version incompatible" or "camera-controls" error
 
 **Problem**: Railway is trying to install frontend dependencies that require Node.js 24+.
