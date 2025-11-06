@@ -5,12 +5,13 @@ import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
 import LobbyModal from './components/LobbyModal'
 import RemotePlayer from './components/RemotePlayer'
+import MobileJoystick from './components/MobileJoystick'
 import { useMultiplayer } from './context/MultiplayerContext'
 
 function Scene() {
   const playerRef = useRef()
   const { remotePlayers } = useMultiplayer()
-  const playerSpawn = useMemo(() => [5, 0, 15], [])
+  const playerSpawn = useMemo(() => [5, -0.2, 15], [])
   const cameraOffset = useMemo(() => [0, 5, 10], [])
   const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
   
@@ -66,12 +67,14 @@ function App() {
 
   return (
     <div className="w-screen h-screen bg-gray-900">
-      <div className="absolute top-4 left-4 z-10 text-white bg-black bg-opacity-50 p-4 rounded-lg">
+      {/* <div className="absolute top-4 left-4 z-10 text-white bg-black bg-opacity-50 p-4 rounded-lg">
         <h1 className="text-2xl font-bold mb-2">3rd Person Game</h1>
         <div className="text-sm text-gray-300 space-y-1">
           <p><span className="font-semibold">WASD / Arrow Keys:</span> Move</p>
           <p><span className="font-semibold">Shift:</span> Sprint</p>
-          <p className="text-xs text-gray-400 mt-2">Camera follows player automatically</p>
+          <p><span className="font-semibold">Mouse:</span> Orbit camera (click to lock cursor)</p>
+          <p><span className="font-semibold">Mobile:</span> Use joystick to move, swipe to look</p>
+          <p className="text-xs text-gray-400 mt-2">Esc releases the cursor</p>
           <div className="mt-3 space-y-1 text-xs">
             <p className="text-gray-400">Multiplayer</p>
             <p className="text-gray-200">
@@ -120,13 +123,14 @@ function App() {
             )}
           </div>
         </div>
-      </div>
+      </div> */}
       <Canvas 
-        camera={{ position: [5, 2, 5], fov: 60 }}
+        camera={{ position: [5, 2, 5], fov: 60, far: 500 }}
         shadows
       >
         <Scene />
       </Canvas>
+      <MobileJoystick />
       <LobbyModal
         isOpen={isLobbyOpen}
         onClose={() => setLobbyOpen(false)}

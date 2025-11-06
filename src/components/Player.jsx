@@ -4,9 +4,11 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { useKeyboard } from '../hooks/useKeyboard'
+import { useInput } from '../context/InputContext'
 import { useMultiplayer } from '../context/MultiplayerContext'
 
 const SYNC_INTERVAL = 0.01
+const UP = new THREE.Vector3(0, 1, 0)
 
 const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   const baseModel = useFBX('/player/aj.fbx')
@@ -28,6 +30,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   // Get keyboard input
   const keys = useKeyboard()
   const { broadcastState, state: multiplayerState } = useMultiplayer()
+  const { movementRef } = useInput()
   
   // Create proper animation clips with explicit names (memoized to avoid recreation)
   const animations = useMemo(() => {
@@ -60,6 +63,8 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   const velocity = useRef(new THREE.Vector3())
   const direction = useRef(new THREE.Vector3())
   const currentAction = useRef(null)
+  const cameraForward = useRef(new THREE.Vector3())
+  const cameraRight = useRef(new THREE.Vector3())
   
   useEffect(() => {
     if (fbx) {
@@ -144,47 +149,65 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
     
     const moveSpeed = keys.shift ? 8 : 4
     direction.current.set(0, 0, 0)
-    
+
+    // Calculate camera aligned movement vectors
+    frameState.camera.getWorldDirection(cameraForward.current)
+    cameraForward.current.y = 0
+    if (cameraForward.current.lengthSq() === 0) {
+      cameraForward.current.set(0, 0, -1)
+    } else {
+      cameraForward.current.normalize()
+    }
+
+    cameraRight.current.crossVectors(cameraForward.current, UP)
+    if (cameraRight.current.lengthSq() === 0) {
+      cameraRight.current.set(1, 0, 0)
+    } else {
+      cameraRight.current.normalize()
+    }
+
+    const joystickMovement = movementRef?.current ?? { x: 0, y: 0 }
+
+    const keyboardForwardAxis = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0)
+    const keyboardRightAxis = (keys.right ? 1 : 0) - (keys.left ? 1 : 0)
+
+    const combinedForward = THREE.MathUtils.clamp(keyboardForwardAxis + joystickMovement.y, -1, 1)
+    const combinedRight = THREE.MathUtils.clamp(keyboardRightAxis + joystickMovement.x, -1, 1)
+
+    const inputMagnitude = Math.min(1, Math.hypot(combinedRight, combinedForward))
+
+    if (inputMagnitude > 0) {
+      direction.current.copy(cameraForward.current).multiplyScalar(combinedForward)
+      direction.current.addScaledVector(cameraRight.current, combinedRight)
+      if (direction.current.lengthSq() > 0) {
+        direction.current.normalize()
+      }
+    } else {
+      direction.current.set(0, 0, 0)
+    }
+
     // Determine movement direction and animation
     let newAction = 'idle'
-    
-    if (keys.forward) {
-      direction.current.z -= 1
-      newAction = 'forward'
-    }
-    if (keys.backward) {
-      direction.current.z += 1
-      newAction = 'backward'
-    }
-    if (keys.left) {
-      direction.current.x -= 1
-      newAction = 'left'
-    }
-    if (keys.right) {
-      direction.current.x += 1
-      newAction = 'right'
-    }
-    
-    // Normalize direction
-    if (direction.current.length() > 0) {
-      direction.current.normalize()
+    if (inputMagnitude > 0.1) {
+      if (Math.abs(combinedForward) >= Math.abs(combinedRight)) {
+        newAction = combinedForward >= 0 ? 'forward' : 'backward'
+      } else {
+        newAction = combinedRight >= 0 ? 'right' : 'left'
+      }
     }
     
     // Update velocity
-    velocity.current.x = direction.current.x * moveSpeed * delta
-    velocity.current.z = direction.current.z * moveSpeed * delta
+    velocity.current.x = direction.current.x * moveSpeed * inputMagnitude * delta
+    velocity.current.z = direction.current.z * moveSpeed * inputMagnitude * delta
     
     // Move player
     groupRef.current.position.x += velocity.current.x
     groupRef.current.position.z += velocity.current.z
     
-    // Rotate player to face movement direction (only for forward/backward, not strafe)
-    if (direction.current.length() > 0) {
-      // Only rotate if moving forward or backward (not just strafing left/right)
-      if (keys.forward || keys.backward) {
-        const angle = Math.atan2(direction.current.x, direction.current.z)
-        groupRef.current.rotation.y = angle
-      }
+    // Rotate player to face movement direction
+    if (direction.current.length() > 0 && inputMagnitude > 0.1) {
+      const angle = Math.atan2(direction.current.x, direction.current.z)
+      groupRef.current.rotation.y = angle
     }
     
     // Switch animations
@@ -224,7 +247,11 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
     if (inRoom && groupRef.current) {
       const elapsed = frameState.clock.elapsedTime
       if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
-        const syncVelocity = [direction.current.x * moveSpeed, 0, direction.current.z * moveSpeed]
+        const syncVelocity = [
+          direction.current.x * moveSpeed * inputMagnitude,
+          0,
+          direction.current.z * moveSpeed * inputMagnitude,
+        ]
 
         broadcastState({
           position: groupRef.current.position.toArray(),
