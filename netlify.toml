@@ -6,6 +6,7 @@
   command = "npm run build"
   # Directory to publish
   publish = "dist"
+  # Node.js version: Netlify will automatically use Node.js 24 from .nvmrc file
 
 # Environment variables (set these in Netlify dashboard instead)
 # Go to Site settings > Environment variables

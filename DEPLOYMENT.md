@@ -92,6 +92,7 @@ This guide explains how to deploy your multiplayer game with the frontend on Net
    - **Base directory**: (leave empty - root)
    - **Build command**: `npm run build`
    - **Publish directory**: `dist`
+   - **Node version**: Netlify will automatically use Node.js 24 from `.nvmrc` file
 
 4. **Environment variables**:
    - Go to Site settings → Environment variables

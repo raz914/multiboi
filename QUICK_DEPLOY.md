@@ -36,6 +36,7 @@ After Netlify deployment, update Railway's `CLIENT_ORIGIN` to your Netlify URL.
 
 ### Frontend (Netlify)
 - ✅ `VITE_MULTIPLAYER_SERVER_URL` = Your Railway/Render backend URL
+- ✅ Node.js version: 24 (automatically detected from `.nvmrc`)
 
 ### Backend (Railway/Render)
 - ✅ `CLIENT_ORIGIN` = Your Netlify frontend URL
