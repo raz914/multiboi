@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "r3f-multiplayer-server": "file:.."
+  }
+}

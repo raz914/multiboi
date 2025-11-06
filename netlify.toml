@@ -1,0 +1,19 @@
+# Netlify configuration file
+# This file helps Netlify build and deploy your site correctly
+
+[build]
+  # Build command
+  command = "npm run build"
+  # Directory to publish
+  publish = "dist"
+
+# Environment variables (set these in Netlify dashboard instead)
+# Go to Site settings > Environment variables
+# Add: VITE_MULTIPLAYER_SERVER_URL = https://your-server-url.railway.app
+
+[[redirects]]
+  # Handle client-side routing
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
