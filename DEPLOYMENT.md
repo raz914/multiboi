@@ -24,7 +24,8 @@ This guide explains how to deploy your multiplayer game with the frontend on Net
    - Click "New Project"
    - Select "Deploy from GitHub repo"
    - Choose your repository
-   - Select the `server` folder as the root directory
+   - **Important**: Set the root directory to `server` (not the root of the repo)
+   - Railway will use Node.js 20 (specified in `server/.nvmrc` and `server/nixpacks.toml`)
 
 3. **Configure environment variables**:
    - Go to your project → Variables tab
@@ -158,6 +159,20 @@ CLIENT_ORIGIN=http://localhost:5173,https://your-netlify-app.netlify.app
 ---
 
 ## Troubleshooting
+
+### Build fails with "Node version incompatible" or "camera-controls" error
+
+**Problem**: Railway is trying to install frontend dependencies that require Node.js 24+.
+
+**Solution**:
+1. Make sure Railway's root directory is set to `server` (not the repo root)
+2. The `server/nixpacks.toml` file should force Node.js 20
+3. If the error persists, in Railway dashboard:
+   - Go to your service → Settings → Variables
+   - Add: `NIXPACKS_NODE_VERSION=20`
+   - Redeploy
+
+**Note**: The `camera-controls` package is only needed for the frontend (Netlify), not the server. Railway should only install server dependencies.
 
 ### Frontend can't connect to backend
 
