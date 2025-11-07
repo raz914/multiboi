@@ -115,7 +115,7 @@ function Environment({ onCoinData, sceneName = 'main', onPortalEnter }) {
 
 // Preload the models for better performance
 useGLTF.preload('/environment/Friendhouse outside.glb')
-// useGLTF.preload('/environment/reception.glb')
+useGLTF.preload('/environment/reception.glb')
 
 export default Environment
 
