@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html, useFBX, useGLTF, useAnimations } from '@react-three/drei'
+import { RigidBody, CapsuleCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
@@ -15,6 +16,7 @@ const RemotePlayer = ({ player }) => {
   const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
   const playerRef = useRef()
   const groupRef = useRef()
+  const rigidBodyRef = useRef()
   const targetPosition = useRef(new THREE.Vector3())
   const targetRotation = useRef(0)
   const currentAction = useRef(null)
@@ -78,14 +80,12 @@ const RemotePlayer = ({ player }) => {
   }, [actions])
 
   useEffect(() => {
-    if (!groupRef.current) return
+    if (!rigidBodyRef.current) return
 
     const [x, y, z] = clampVectorArray(player?.position)
-    groupRef.current.position.set(x, y, z)
     targetPosition.current.set(x, y, z)
 
     const rotation = typeof player?.rotation === 'number' ? player.rotation : 0
-    groupRef.current.rotation.y = rotation
     targetRotation.current = rotation
   }, [player?.position, player?.rotation])
 
@@ -114,31 +114,50 @@ const RemotePlayer = ({ player }) => {
   }, [player?.action, actions])
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return
+    if (!rigidBodyRef.current) return
 
     const lerpFactor = THREE.MathUtils.clamp(delta * 8, 0, 1)
 
-    groupRef.current.position.lerp(targetPosition.current, lerpFactor)
-    groupRef.current.rotation.y = THREE.MathUtils.lerp(
-      groupRef.current.rotation.y,
-      targetRotation.current,
-      lerpFactor,
+    // Get current position and lerp to target
+    const currentPos = rigidBodyRef.current.translation()
+    const newX = THREE.MathUtils.lerp(currentPos.x, targetPosition.current.x, lerpFactor)
+    const newY = THREE.MathUtils.lerp(currentPos.y, targetPosition.current.y, lerpFactor)
+    const newZ = THREE.MathUtils.lerp(currentPos.z, targetPosition.current.z, lerpFactor)
+    
+    rigidBodyRef.current.setTranslation({ x: newX, y: newY, z: newZ }, true)
+
+    // Lerp rotation
+    const currentRot = rigidBodyRef.current.rotation()
+    const currentEuler = new THREE.Euler().setFromQuaternion(
+      new THREE.Quaternion(currentRot.x, currentRot.y, currentRot.z, currentRot.w)
     )
+    const newRotY = THREE.MathUtils.lerp(currentEuler.y, targetRotation.current, lerpFactor)
+    const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, newRotY, 0))
+    
+    rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
   })
 
   if (!fbx) return null
 
   return (
-    <group ref={groupRef}>
-      <primitive ref={playerRef} object={fbx} />
-      {player?.name && (
-        <Html position={[0, 2.2, 0]} center distanceFactor={12} transform>
-          <div className="rounded bg-black/70 px-2 py-1 text-xs font-semibold text-white">
-            {player.name}
-          </div>
-        </Html>
-      )}
-    </group>
+    <RigidBody
+      ref={rigidBodyRef}
+      type="kinematicPosition"
+      colliders={false}
+      enabledRotations={[false, true, false]}
+    >
+      <CapsuleCollider args={[0.5, 0.5]} position={[0, 1, 0]} />
+      <group ref={groupRef}>
+        <primitive ref={playerRef} object={fbx} />
+        {player?.name && (
+          <Html position={[0, 2.2, 0]} center distanceFactor={12} transform>
+            <div className="rounded bg-black/70 px-2 py-1 text-xs font-semibold text-white">
+              {player.name}
+            </div>
+          </Html>
+        )}
+      </group>
+    </RigidBody>
   )
 }
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'rea
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { RigidBody, CapsuleCollider } from '@react-three/rapier'
 import { useKeyboard } from '../hooks/useKeyboard'
 import { useInput } from '../context/InputContext'
 import { useMultiplayer } from '../context/MultiplayerContext'
@@ -15,10 +16,11 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
   const playerRef = useRef()
   const groupRef = useRef()
+  const rigidBodyRef = useRef()
   const lastSyncTime = useRef(0)
   
-  // Expose the group ref to parent
-  useImperativeHandle(ref, () => groupRef.current)
+  // Expose the rigid body ref to parent (for camera to follow)
+  useImperativeHandle(ref, () => rigidBodyRef.current)
   
   // Load all animation files
   const idleAnim = useGLTF('/anims/idle.glb')
@@ -65,6 +67,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   const currentAction = useRef(null)
   const cameraForward = useRef(new THREE.Vector3())
   const cameraRight = useRef(new THREE.Vector3())
+  const lastRotation = useRef(0)
   
   useEffect(() => {
     if (fbx) {
@@ -145,7 +148,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   
   // Update player movement and animations
   useFrame((frameState, delta) => {
-    if (!playerRef.current || !groupRef.current) return
+    if (!playerRef.current || !rigidBodyRef.current) return
     
     const moveSpeed = keys.shift ? 8 : 4
     direction.current.set(0, 0, 0)
@@ -196,19 +199,34 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
       }
     }
     
-    // Update velocity
-    velocity.current.x = direction.current.x * moveSpeed * inputMagnitude * delta
-    velocity.current.z = direction.current.z * moveSpeed * inputMagnitude * delta
+    // Update velocity using physics
+    const currentVel = rigidBodyRef.current.linvel()
+    velocity.current.x = direction.current.x * moveSpeed * inputMagnitude
+    velocity.current.z = direction.current.z * moveSpeed * inputMagnitude
     
-    // Move player
-    groupRef.current.position.x += velocity.current.x
-    groupRef.current.position.z += velocity.current.z
+    // Set velocity on rigid body (keep Y velocity for gravity)
+    rigidBodyRef.current.setLinvel({ 
+      x: velocity.current.x, 
+      y: currentVel.y, 
+      z: velocity.current.z 
+    }, true)
     
     // Rotate player to face movement direction
     if (direction.current.length() > 0 && inputMagnitude > 0.1) {
       const angle = Math.atan2(direction.current.x, direction.current.z)
-      groupRef.current.rotation.y = angle
+      lastRotation.current = angle
+      const quat = new THREE.Quaternion()
+      quat.setFromAxisAngle(UP, angle)
+      rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
+    } else {
+      // When idle, maintain the last rotation
+      const quat = new THREE.Quaternion()
+      quat.setFromAxisAngle(UP, lastRotation.current)
+      rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
     }
+    
+    // Always set angular velocity to zero to prevent spinning
+    rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
     
     // Switch animations
     if (newAction !== currentAction.current && actions && actions[newAction]) {
@@ -244,7 +262,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
     const inRoom =
       multiplayerState.roomCode && (multiplayerState.status === 'hosting' || multiplayerState.status === 'connected')
 
-    if (inRoom && groupRef.current) {
+    if (inRoom && rigidBodyRef.current) {
       const elapsed = frameState.clock.elapsedTime
       if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
         const syncVelocity = [
@@ -253,9 +271,13 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
           direction.current.z * moveSpeed * inputMagnitude,
         ]
 
+        const pos = rigidBodyRef.current.translation()
+        const rot = rigidBodyRef.current.rotation()
+        const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w))
+
         broadcastState({
-          position: groupRef.current.position.toArray(),
-          rotation: groupRef.current.rotation.y,
+          position: [pos.x, pos.y, pos.z],
+          rotation: euler.y,
           action: currentAction.current || 'idle',
           velocity: syncVelocity,
         })
@@ -268,12 +290,23 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   if (!fbx) return null
 
   return (
-    <group ref={groupRef} position={position}>
-      <primitive 
-        ref={playerRef}
-        object={fbx}
-      />
-    </group>
+    <RigidBody
+      ref={rigidBodyRef}
+      position={position}
+      enabledRotations={[false, true, false]}
+      lockRotations={false}
+      colliders={false}
+      mass={1}
+      type="dynamic"
+    >
+      <CapsuleCollider args={[0.5, 0.5]} position={[0, 1, 0]} />
+      <group ref={groupRef}>
+        <primitive 
+          ref={playerRef}
+          object={fbx}
+        />
+      </group>
+    </RigidBody>
   )
 })
 

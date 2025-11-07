@@ -12,11 +12,12 @@ function ThirdPersonCamera({
   offset = [0, 4, 8],
   lookAtOffset = [0, 1, 0],
   minDistance = 3,
-  maxDistance = 8,
+  maxDistance = 6,
   minPolarAngle = 0.2,
   maxPolarAngle = Math.PI / 2.1,
   rotationSensitivity = 0.0025,
   zoomSensitivity = 0.01,
+  
   touchRotationMultiplier = 1.6,
 }) {
   const { camera, gl } = useThree()
@@ -50,13 +51,27 @@ function ThirdPersonCamera({
   useEffect(() => {
     if (!target?.current) return
 
-    const targetPos = target.current.position
+    // Handle both RigidBody (translation()) and regular Object3D (position)
+    let targetPos
+    if (target.current.translation && typeof target.current.translation === 'function') {
+      try {
+        targetPos = target.current.translation()
+      } catch (e) {
+        // RigidBody not ready yet, skip this update
+        return
+      }
+    } else {
+      targetPos = target.current.position
+    }
+    
+    if (!targetPos) return
+    
     tempOffset.current.setFromSpherical(spherical.current)
 
-    idealPosition.current.copy(targetPos).add(tempOffset.current)
+    idealPosition.current.set(targetPos.x, targetPos.y, targetPos.z).add(tempOffset.current)
     currentPosition.current.copy(idealPosition.current)
 
-    idealLookAt.current.copy(targetPos).add(lookAtOffsetVector.current)
+    idealLookAt.current.set(targetPos.x, targetPos.y, targetPos.z).add(lookAtOffsetVector.current)
     currentLookAt.current.copy(idealLookAt.current)
 
     camera.position.copy(currentPosition.current)
@@ -189,13 +204,27 @@ function ThirdPersonCamera({
   useFrame((state, delta) => {
     if (!target?.current) return
 
-    const targetPos = target.current.position
+    // Handle both RigidBody (translation()) and regular Object3D (position)
+    let targetPos
+    if (target.current.translation && typeof target.current.translation === 'function') {
+      try {
+        targetPos = target.current.translation()
+      } catch (e) {
+        // RigidBody not ready yet, skip this frame
+        return
+      }
+    } else {
+      targetPos = target.current.position
+    }
+    
+    if (!targetPos) return
+    
     const lerpFactor = 1 - Math.pow(0.001, delta)
 
     tempOffset.current.setFromSpherical(spherical.current)
 
-    idealPosition.current.copy(targetPos).add(tempOffset.current)
-    idealLookAt.current.copy(targetPos).add(lookAtOffsetVector.current)
+    idealPosition.current.set(targetPos.x, targetPos.y, targetPos.z).add(tempOffset.current)
+    idealLookAt.current.set(targetPos.x, targetPos.y, targetPos.z).add(lookAtOffsetVector.current)
 
     currentPosition.current.lerp(idealPosition.current, lerpFactor)
     currentLookAt.current.lerp(idealLookAt.current, lerpFactor)

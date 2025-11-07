@@ -1,19 +1,32 @@
 import { Canvas } from '@react-three/fiber'
-import { Suspense, useMemo, useRef, useState } from 'react'
+import { Suspense, useMemo, useRef, useState, useEffect } from 'react'
+import { Physics } from '@react-three/rapier'
 import Environment from './components/Environment'
 import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
 import LobbyModal from './components/LobbyModal'
 import RemotePlayer from './components/RemotePlayer'
 import MobileJoystick from './components/MobileJoystick'
+import LoadingScreen from './components/LoadingScreen'
+import CoinCounter from './components/CoinCounter'
 import { useMultiplayer } from './context/MultiplayerContext'
 
-function Scene() {
+const SPAWN_POSITIONS = {
+  main: [5, 0.2, 15],
+  reception: [0, 0.2, 5]
+}
+
+function Scene({ onCoinData, currentScene, onSceneChange }) {
   const playerRef = useRef()
   const { remotePlayers } = useMultiplayer()
-  const playerSpawn = useMemo(() => [5, -0.2, 15], [])
+  const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.main, [currentScene])
   const cameraOffset = useMemo(() => [0, 5, 10], [])
   const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
+  
+  const handlePortalEnter = (targetScene) => {
+    console.log('[Scene] Portal entered, changing to:', targetScene)
+    onSceneChange(targetScene)
+  }
   
   return (
     <>
@@ -26,22 +39,30 @@ function Scene() {
       />
       <hemisphereLight intensity={0.3} groundColor="#444444" />
       
-      {/* Load Environment first */}
-      <Suspense fallback={null}>
-        <Environment />
-      </Suspense>
-      
-      {/* Then spawn the Player */}
-      <Suspense fallback={null}>
-        <Player ref={playerRef} position={playerSpawn} />
-      </Suspense>
+      {/* Physics World */}
+      <Physics gravity={[0, -9.81, 0]} key={currentScene}>
+        {/* Load Environment first */}
+        <Suspense fallback={null}>
+          <Environment 
+            key={currentScene}
+            onCoinData={onCoinData} 
+            sceneName={currentScene}
+            onPortalEnter={handlePortalEnter}
+          />
+        </Suspense>
+        
+        {/* Then spawn the Player */}
+        <Suspense fallback={null}>
+          <Player key={currentScene} ref={playerRef} position={playerPosition} />
+        </Suspense>
 
-      {/* Remote players */}
-      <Suspense fallback={null}>
-        {remotePlayers.map((player) => (
-          <RemotePlayer key={player.id} player={player} />
-        ))}
-      </Suspense>
+        {/* Remote players */}
+        <Suspense fallback={null}>
+          {remotePlayers.map((player) => (
+            <RemotePlayer key={player.id} player={player} />
+          ))}
+        </Suspense>
+      </Physics>
       
       {/* 3rd Person Camera follows player */}
       <ThirdPersonCamera 
@@ -55,6 +76,9 @@ function Scene() {
 
 function App() {
   const [isLobbyOpen, setLobbyOpen] = useState(true)
+  const [coinData, setCoinData] = useState({ collected: 0, total: 0 })
+  const [currentScene, setCurrentScene] = useState('main')
+  const [isSceneLoading, setIsSceneLoading] = useState(false)
   const {
     state: { roomCode, playerName, isHost, status, players, error },
     createRoom,
@@ -64,6 +88,19 @@ function App() {
     availableRooms,
     refreshRooms,
   } = useMultiplayer()
+  
+  const handleSceneChange = (newScene) => {
+    console.log('[App] Scene change requested:', newScene)
+    setIsSceneLoading(true)
+    // Small delay to show loading screen
+    setTimeout(() => {
+      setCurrentScene(newScene)
+      setCoinData({ collected: 0, total: 0 }) // Reset coins for new scene
+      setTimeout(() => {
+        setIsSceneLoading(false)
+      }, 500)
+    }, 100)
+  }
 
   return (
     <div className="w-screen h-screen bg-gray-900">
@@ -125,12 +162,24 @@ function App() {
         </div>
       </div> */}
       <Canvas 
-        camera={{ position: [5, 2, 5], fov: 60, far: 500 }}
+        camera={{ position: [5, 2, 5], fov: 70, far: 500 }}
         shadows
       >
-        <Scene />
+        <Scene 
+          onCoinData={setCoinData} 
+          currentScene={currentScene}
+          onSceneChange={handleSceneChange}
+        />
       </Canvas>
+      <LoadingScreen forceShow={isSceneLoading} />
       <MobileJoystick />
+      {coinData.total > 0 && (
+        <CoinCounter collected={coinData.collected} total={coinData.total} />
+      )}
+      {/* Scene indicator */}
+      <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-70 px-4 py-2 rounded-lg text-white text-sm font-semibold">
+        {currentScene === 'main' ? '🏠 Outside' : '🏢 Reception'}
+      </div>
       <LobbyModal
         isOpen={isLobbyOpen}
         onClose={() => setLobbyOpen(false)}
