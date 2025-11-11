@@ -11,13 +11,14 @@ import { useMultiplayer } from '../context/MultiplayerContext'
 const SYNC_INTERVAL = 0.01
 const UP = new THREE.Vector3(0, 1, 0)
 
-const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
+const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, ref) => {
   const baseModel = useFBX('/player/aj.fbx')
   const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
   const playerRef = useRef()
   const groupRef = useRef()
   const rigidBodyRef = useRef()
   const lastSyncTime = useRef(0)
+  const didSignalReadyRef = useRef(false)
   
   // Expose the rigid body ref to parent (for camera to follow)
   useImperativeHandle(ref, () => rigidBodyRef.current)
@@ -83,6 +84,26 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
       })
     }
   }, [fbx])
+
+  useEffect(() => {
+    if (!onReady || !fbx || didSignalReadyRef.current) return
+
+    const frame = requestAnimationFrame(() => {
+      if (rigidBodyRef.current) {
+        didSignalReadyRef.current = true
+        onReady()
+      }
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [fbx, onReady])
+
+  useEffect(() => () => {
+    didSignalReadyRef.current = false
+    playerRef.current = null
+    groupRef.current = null
+    rigidBodyRef.current = null
+  }, [])
   
   // Animation handling - Play idle by default and set all animations to loop
   useEffect(() => {
@@ -148,8 +169,11 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
   
   // Update player movement and animations
   useFrame((frameState, delta) => {
-    if (!playerRef.current || !rigidBodyRef.current) return
-    
+    if (!isActive) return
+    const body = rigidBodyRef.current
+    const character = playerRef.current
+    if (!body || !character) return
+
     const moveSpeed = keys.shift ? 8 : 4
     direction.current.set(0, 0, 0)
 
@@ -198,41 +222,44 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
         newAction = combinedRight >= 0 ? 'right' : 'left'
       }
     }
-    
+
     // Update velocity using physics
-    const currentVel = rigidBodyRef.current.linvel()
+    const currentVel = body.linvel()
     velocity.current.x = direction.current.x * moveSpeed * inputMagnitude
     velocity.current.z = direction.current.z * moveSpeed * inputMagnitude
-    
+
     // Set velocity on rigid body (keep Y velocity for gravity)
-    rigidBodyRef.current.setLinvel({ 
-      x: velocity.current.x, 
-      y: currentVel.y, 
-      z: velocity.current.z 
-    }, true)
-    
+    body.setLinvel(
+      {
+        x: velocity.current.x,
+        y: currentVel.y,
+        z: velocity.current.z,
+      },
+      true,
+    )
+
     // Rotate player to face movement direction
     if (direction.current.length() > 0 && inputMagnitude > 0.1) {
       const angle = Math.atan2(direction.current.x, direction.current.z)
       lastRotation.current = angle
       const quat = new THREE.Quaternion()
       quat.setFromAxisAngle(UP, angle)
-      rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
+      body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
     } else {
       // When idle, maintain the last rotation
       const quat = new THREE.Quaternion()
       quat.setFromAxisAngle(UP, lastRotation.current)
-      rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
+      body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
     }
-    
+
     // Always set angular velocity to zero to prevent spinning
-    rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-    
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+
     // Switch animations
     if (newAction !== currentAction.current && actions && actions[newAction]) {
       const prevAction = currentAction.current ? actions[currentAction.current] : null
       const nextAction = actions[newAction]
-      
+
       if (nextAction) {
         console.log('[Player] Switching animation:', {
           from: currentAction.current,
@@ -240,12 +267,10 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
           nextDuration: nextAction?.getClip?.()?.duration,
           prevDuration: prevAction?.getClip?.()?.duration,
         })
-        // Stop previous action
         if (prevAction && typeof prevAction.fadeOut === 'function') {
           prevAction.fadeOut(0.2)
         }
-        
-        // Ensure loop settings before playing
+
         nextAction.setLoop(THREE.LoopRepeat, Infinity)
         nextAction.clampWhenFinished = false
         nextAction.enabled = true
@@ -254,7 +279,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
         nextAction.paused = false
         nextAction.fadeIn(0.2)
         nextAction.play()
-        
+
         currentAction.current = newAction
       }
     }
@@ -262,7 +287,7 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
     const inRoom =
       multiplayerState.roomCode && (multiplayerState.status === 'hosting' || multiplayerState.status === 'connected')
 
-    if (inRoom && rigidBodyRef.current) {
+    if (inRoom) {
       const elapsed = frameState.clock.elapsedTime
       if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
         const syncVelocity = [
@@ -271,8 +296,8 @@ const Player = forwardRef(({ position = [0, 0, 0] }, ref) => {
           direction.current.z * moveSpeed * inputMagnitude,
         ]
 
-        const pos = rigidBodyRef.current.translation()
-        const rot = rigidBodyRef.current.rotation()
+        const pos = body.translation()
+        const rot = body.rotation()
         const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w))
 
         broadcastState({

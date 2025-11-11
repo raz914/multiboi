@@ -11,7 +11,7 @@ const clampVectorArray = (values = []) => {
   return [Number.parseFloat(x) || 0, Number.parseFloat(y) || 0, Number.parseFloat(z) || 0]
 }
 
-const RemotePlayer = ({ player }) => {
+const RemotePlayer = ({ player, isActive = true }) => {
   const baseModel = useFBX('/player/aj.fbx')
   const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
   const playerRef = useRef()
@@ -113,28 +113,36 @@ const RemotePlayer = ({ player }) => {
     currentAction.current = nextActionName
   }, [player?.action, actions])
 
+  useEffect(() => () => {
+    playerRef.current = null
+    groupRef.current = null
+    rigidBodyRef.current = null
+  }, [])
+
   useFrame((_, delta) => {
-    if (!rigidBodyRef.current) return
+    if (!isActive) return
+    const body = rigidBodyRef.current
+    if (!body) return
 
     const lerpFactor = THREE.MathUtils.clamp(delta * 8, 0, 1)
 
     // Get current position and lerp to target
-    const currentPos = rigidBodyRef.current.translation()
+    const currentPos = body.translation()
     const newX = THREE.MathUtils.lerp(currentPos.x, targetPosition.current.x, lerpFactor)
     const newY = THREE.MathUtils.lerp(currentPos.y, targetPosition.current.y, lerpFactor)
     const newZ = THREE.MathUtils.lerp(currentPos.z, targetPosition.current.z, lerpFactor)
-    
-    rigidBodyRef.current.setTranslation({ x: newX, y: newY, z: newZ }, true)
+
+    body.setTranslation({ x: newX, y: newY, z: newZ }, true)
 
     // Lerp rotation
-    const currentRot = rigidBodyRef.current.rotation()
+    const currentRot = body.rotation()
     const currentEuler = new THREE.Euler().setFromQuaternion(
-      new THREE.Quaternion(currentRot.x, currentRot.y, currentRot.z, currentRot.w)
+      new THREE.Quaternion(currentRot.x, currentRot.y, currentRot.z, currentRot.w),
     )
     const newRotY = THREE.MathUtils.lerp(currentEuler.y, targetRotation.current, lerpFactor)
     const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, newRotY, 0))
-    
-    rigidBodyRef.current.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
+
+    body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
   })
 
   if (!fbx) return null

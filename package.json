@@ -7,17 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "server:dev": "npm run dev --prefix server",
-    "server:start": "npm run start --prefix server"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.4.0",
     "@react-three/rapier": "^2.2.0",
+    "photon-realtime": "^4.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "socket.io-client": "^4.8.1",
     "three": "^0.181.0"
   },
   "devDependencies": {

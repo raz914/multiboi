@@ -144,10 +144,14 @@ function LobbyModal({
         </div>
 
         <div className="mb-4 rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-gray-300">
-          <p className="font-semibold uppercase tracking-wide text-gray-400">Server Status</p>
+          <p className="font-semibold uppercase tracking-wide text-gray-400">Photon Cloud Status</p>
           <p className="mt-1 capitalize text-gray-200">{connectionState}</p>
           {connectionState !== 'connected' && (
-            <p className="mt-1 text-gray-400">Ensure the Socket.IO server is running on port 4000.</p>
+            <p className="mt-1 text-gray-400">
+              {connectionState === 'connecting' 
+                ? 'Connecting to Photon Cloud...' 
+                : 'Unable to connect to Photon Cloud. Check your App ID in .env file.'}
+            </p>
           )}
         </div>
 

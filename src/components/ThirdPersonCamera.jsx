@@ -12,7 +12,7 @@ function ThirdPersonCamera({
   offset = [0, 4, 8],
   lookAtOffset = [0, 1, 0],
   minDistance = 3,
-  maxDistance = 6,
+  maxDistance = 3,
   minPolarAngle = 0.2,
   maxPolarAngle = Math.PI / 2.1,
   rotationSensitivity = 0.0025,
