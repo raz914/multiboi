@@ -1,6 +1,8 @@
 import { Canvas } from '@react-three/fiber'
+import { AdaptiveDpr, AdaptiveEvents, PerformanceMonitor } from '@react-three/drei'
 import { Suspense, useMemo, useRef, useState, useCallback, useEffect } from 'react'
 import { Physics } from '@react-three/rapier'
+import * as THREE from 'three'
 import Environment from './components/Environment'
 import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
@@ -9,17 +11,21 @@ import RemotePlayer from './components/RemotePlayer'
 import MobileJoystick from './components/MobileJoystick'
 import LoadingScreen from './components/LoadingScreen'
 import CoinCounter from './components/CoinCounter'
+import IframeModal from './components/IframeModal'
+import InteractionPrompt from './components/InteractionPrompt'
+import HDRBackground from './components/HDRBackground'
 import { useMultiplayer } from './context/MultiplayerContext'
+import { useHDRPreload } from './hooks/useHDRPreload'
 
 const SPAWN_POSITIONS = {
-  main: [5, 1.2, 15],
+  opera: [0, 1.2, 5],
   reception: [0, 0.5, 5],
 }
 
-function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange }) {
+function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, hdrTexture }) {
   const playerRef = useRef()
   const { remotePlayers } = useMultiplayer()
-  const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.main, [currentScene])
+  const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.opera, [currentScene])
   const cameraOffset = useMemo(() => [0, 5, 10], [])
   const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
   const [environmentReady, setEnvironmentReady] = useState(false)
@@ -62,12 +68,20 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange }) 
     setPlayerReady(false)
   }, [currentScene])
 
+  // Increased base lighting for better mobile visibility
+  const ambientIntensity = isPerformanceMode ? 0.7 : 0.8
+  const directionalIntensity = isPerformanceMode ? 1.2 : 1.5
+  const hemisphereIntensity = isPerformanceMode ? 0.4 : 0.5
+
   return (
     <>
+      {/* HDR Background */}
+      <HDRBackground texture={hdrTexture} applyAsEnvironment={false} useFallback={true} />
+
       {/* Lighting setup */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
-      <hemisphereLight intensity={0.3} groundColor="#444444" />
+      <ambientLight intensity={ambientIntensity} />
+      <directionalLight position={[10, 10, 5]} intensity={directionalIntensity} castShadow={!isPerformanceMode} />
+      <hemisphereLight intensity={hemisphereIntensity} groundColor="#444444" />
 
       {/* Physics World */}
       <Physics gravity={[0, -9.81, 0]} key={currentScene} paused={!environmentReady}>
@@ -79,6 +93,10 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange }) 
             sceneName={currentScene}
             onPortalEnter={handlePortalEnter}
             onReady={handleEnvironmentReady}
+            disableAnimations={isPerformanceMode}
+            onMeshClick={onMeshClick}
+            onProximityChange={onProximityChange}
+            playerRef={playerRef}
           />
         </Suspense>
 
@@ -106,11 +124,17 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange }) 
 }
 
 function App() {
+  // Preload HDR before scene renders
+  const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload('/hdr/main.hdr')
+  
   const [isLobbyOpen, setLobbyOpen] = useState(true)
   const [coinData, setCoinData] = useState({ collected: 0, total: 0 })
-  const [currentScene, setCurrentScene] = useState('main')
+  const [currentScene, setCurrentScene] = useState('opera')
   const [sceneReady, setSceneReady] = useState(false)
   const [isSceneLoading, setIsSceneLoading] = useState(true)
+  const [isPerformanceMode, setPerformanceMode] = useState(false)
+  const [iframeModal, setIframeModal] = useState({ isOpen: false, url: '', title: '' })
+  const [nearbyMesh, setNearbyMesh] = useState(null)
   const {
     state: { roomCode, playerName, isHost, status, players, error },
     createRoom,
@@ -121,6 +145,17 @@ function App() {
     refreshRooms,
   } = useMultiplayer()
 
+  // Log HDR loading status
+  useEffect(() => {
+    if (hdrError) {
+      console.error('[App] HDR loading failed, using fallback')
+    } else if (hdrTexture) {
+      console.log('[App] HDR texture loaded successfully')
+    } else if (hdrLoading) {
+      console.log('[App] HDR texture is loading...')
+    }
+  }, [hdrTexture, hdrLoading, hdrError])
+
   const handleSceneReadyChange = useCallback((ready) => {
     setSceneReady(ready)
     setIsSceneLoading(!ready)
@@ -130,10 +165,6 @@ function App() {
     (newScene) => {
       if (!newScene || newScene === currentScene) return
 
-      if (document.pointerLockElement) {
-        document.exitPointerLock?.()
-      }
-
       setSceneReady(false)
       setIsSceneLoading(true)
       setCoinData({ collected: 0, total: 0 })
@@ -142,23 +173,84 @@ function App() {
     [currentScene],
   )
 
+  const handleMeshClick = useCallback((url, meshName) => {
+    console.log('[App] Opening iframe for mesh:', meshName, 'URL:', url)
+    setIframeModal({
+      isOpen: true,
+      url: url,
+      title: `Content - ${meshName}`,
+    })
+  }, [])
+
+  const handleCloseIframe = useCallback(() => {
+    setIframeModal({ isOpen: false, url: '', title: '' })
+  }, [])
+
+  const handleProximityChange = useCallback((isNear, meshName) => {
+    if (isNear) {
+      setNearbyMesh(meshName)
+    } else {
+      // Only clear if this mesh is the currently tracked one
+      setNearbyMesh(prev => prev === meshName ? null : prev)
+    }
+  }, [])
+
   return (
     <div className="w-screen h-screen bg-gray-900">
-      <Canvas camera={{ position: [5, 2, 5], fov: 70, far: 500 }} shadows>
-        <Scene
-          key={currentScene}
-          onCoinData={setCoinData}
-          currentScene={currentScene}
-          onSceneChange={handleSceneChange}
-          onSceneReadyChange={handleSceneReadyChange}
-        />
+      <Canvas
+        camera={{ position: [5, 2, 5], fov: 80, far: 500 }}
+        shadows={!isPerformanceMode}
+        dpr={isPerformanceMode ? 1 : [1, 1.8]}
+        gl={{ 
+          antialias: !isPerformanceMode,
+          powerPreference: 'high-performance',
+          alpha: false,
+          stencil: false
+        }}
+        onCreated={({ gl, scene }) => {
+          // Set fallback background color
+          scene.background = new THREE.Color(0x87CEEB)
+          console.log('[Canvas] Initialized with fallback background')
+        }}
+      >
+        <PerformanceMonitor
+          onDecline={() => setPerformanceMode(true)}
+          onIncline={() => setPerformanceMode(false)}
+        >
+          <AdaptiveDpr pixelated />
+          <AdaptiveEvents />
+          <Scene
+            key={currentScene}
+            onCoinData={setCoinData}
+            currentScene={currentScene}
+            onSceneChange={handleSceneChange}
+            onSceneReadyChange={handleSceneReadyChange}
+            isPerformanceMode={isPerformanceMode}
+            onMeshClick={handleMeshClick}
+            onProximityChange={handleProximityChange}
+          />
+        </PerformanceMonitor>
       </Canvas>
       <LoadingScreen forceShow={isSceneLoading} />
       <MobileJoystick />
       {coinData.total > 0 && <CoinCounter collected={coinData.collected} total={coinData.total} />}
+      
+      {/* Interaction Prompt */}
+      <InteractionPrompt 
+        isVisible={!!nearbyMesh && !iframeModal.isOpen} 
+        message="Click on wall poster to view content" 
+      />
+      
+      {/* Iframe Modal */}
+      <IframeModal
+        isOpen={iframeModal.isOpen}
+        onClose={handleCloseIframe}
+        url={iframeModal.url}
+        title={iframeModal.title}
+      />
       {/* Scene indicator */}
       <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-70 px-4 py-2 rounded-lg text-white text-sm font-semibold">
-        {currentScene === 'main' ? '🏠 Outside' : '🏢 Reception'}
+        {currentScene === 'opera' ? '🎭 Opera House' : '🏢 Reception'}
       </div>
       <LobbyModal
         isOpen={isLobbyOpen}

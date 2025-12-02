@@ -18,7 +18,7 @@ function ThirdPersonCamera({
   rotationSensitivity = 0.0025,
   zoomSensitivity = 0.01,
   
-  touchRotationMultiplier = 1.6,
+  touchRotationMultiplier = 3.0,
 }) {
   const { camera, gl } = useThree()
 
@@ -26,8 +26,26 @@ function ThirdPersonCamera({
   const currentPosition = useRef(new THREE.Vector3())
   const currentLookAt = useRef(new THREE.Vector3())
   const lookAtOffsetVector = useRef(new THREE.Vector3())
-  const pointerLocked = useRef(false)
+  const mouseDown = useRef(false)
+  const lastMouseX = useRef(0)
+  const lastMouseY = useRef(0)
   const touchState = useRef({ active: false, lastX: 0, lastY: 0, identifier: null })
+  
+  // Function to check if touch is on joystick area (bottom-left quadrant)
+  const isTouchOnJoystick = (touch) => {
+    const x = touch.clientX
+    const y = touch.clientY
+    const windowWidth = window.innerWidth
+    const windowHeight = window.innerHeight
+    
+    // Joystick is in bottom-left corner (bottom-8 left-8)
+    // Joystick size is ~112px + some padding for easier touch
+    // Consider left 200px and bottom 200px as joystick zone
+    const joystickZoneWidth = Math.min(200, windowWidth * 0.35)
+    const joystickZoneHeight = Math.min(200, windowHeight * 0.35)
+    
+    return x < joystickZoneWidth && y > (windowHeight - joystickZoneHeight)
+  }
 
   const tempOffset = useRef(new THREE.Vector3())
   const idealPosition = useRef(new THREE.Vector3())
@@ -85,28 +103,29 @@ function ThirdPersonCamera({
     const previousTouchAction = element.style.touchAction
     element.style.touchAction = 'none'
 
-    const handlePointerLockChange = () => {
-      pointerLocked.current = document.pointerLockElement === element
-    }
-
-    const handlePointerLockError = () => {
-      pointerLocked.current = false
-    }
-
-    const requestPointerLock = (event) => {
+    const handleMouseDown = (event) => {
       if (event.pointerType === 'touch') return
-      if (event.button !== 0) return
-      if (document.pointerLockElement === element) return
-      element.requestPointerLock?.()
+      if (event.button !== 0) return // Only left click
+      mouseDown.current = true
+      lastMouseX.current = event.clientX
+      lastMouseY.current = event.clientY
+    }
+
+    const handleMouseUp = () => {
+      mouseDown.current = false
     }
 
     const handleMouseMove = (event) => {
-      if (!pointerLocked.current) return
-      const movementX = event.movementX ?? 0
-      const movementY = event.movementY ?? 0
+      if (!mouseDown.current) return
+      
+      const deltaX = event.clientX - lastMouseX.current
+      const deltaY = event.clientY - lastMouseY.current
 
-      spherical.current.theta -= movementX * rotationSensitivity
-      spherical.current.phi -= movementY * rotationSensitivity
+      lastMouseX.current = event.clientX
+      lastMouseY.current = event.clientY
+
+      spherical.current.theta -= deltaX * rotationSensitivity
+      spherical.current.phi -= deltaY * rotationSensitivity
       spherical.current.phi = THREE.MathUtils.clamp(
         spherical.current.phi,
         minPolarAngle,
@@ -126,16 +145,24 @@ function ThirdPersonCamera({
 
     const handleTouchStart = (event) => {
       if (event.touches.length === 0) return
-      const touch = event.touches[0]
-      touchState.current.active = true
-      touchState.current.identifier = touch.identifier
-      touchState.current.lastX = touch.clientX
-      touchState.current.lastY = touch.clientY
+      
+      // If we already have an active touch for camera, ignore new touches
+      if (touchState.current.active) return
+      
+      // Find a touch that's not on the joystick
+      const cameraTouch = Array.from(event.touches).find(t => !isTouchOnJoystick(t))
+      
+      if (cameraTouch) {
+        touchState.current.active = true
+        touchState.current.identifier = cameraTouch.identifier
+        touchState.current.lastX = cameraTouch.clientX
+        touchState.current.lastY = cameraTouch.clientY
+      }
     }
 
     const handleTouchMove = (event) => {
       if (!touchState.current.active) return
-      const touch = Array.from(event.touches).find((t) => t.identifier === touchState.current.identifier) || event.touches[0]
+      const touch = Array.from(event.touches).find((t) => t.identifier === touchState.current.identifier)
       if (!touch) return
 
       const deltaX = touch.clientX - touchState.current.lastX
@@ -154,6 +181,7 @@ function ThirdPersonCamera({
         maxPolarAngle
       )
 
+      // Only prevent default if we're actually using this touch for camera
       event.preventDefault()
     }
 
@@ -165,12 +193,22 @@ function ThirdPersonCamera({
       ) {
         touchState.current.active = false
         touchState.current.identifier = null
+        
+        // If there are still touches remaining, check if any can be used for camera
+        if (event.touches.length > 0) {
+          const cameraTouch = Array.from(event.touches).find(t => !isTouchOnJoystick(t))
+          if (cameraTouch) {
+            touchState.current.active = true
+            touchState.current.identifier = cameraTouch.identifier
+            touchState.current.lastX = cameraTouch.clientX
+            touchState.current.lastY = cameraTouch.clientY
+          }
+        }
       }
     }
 
-    element.addEventListener('pointerdown', requestPointerLock)
-    document.addEventListener('pointerlockchange', handlePointerLockChange)
-    document.addEventListener('pointerlockerror', handlePointerLockError)
+    element.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('mouseup', handleMouseUp)
     document.addEventListener('mousemove', handleMouseMove)
     element.addEventListener('wheel', handleWheel, { passive: false })
     element.addEventListener('touchstart', handleTouchStart, { passive: false })
@@ -179,9 +217,8 @@ function ThirdPersonCamera({
     element.addEventListener('touchcancel', handleTouchEnd)
 
     return () => {
-      element.removeEventListener('pointerdown', requestPointerLock)
-      document.removeEventListener('pointerlockchange', handlePointerLockChange)
-      document.removeEventListener('pointerlockerror', handlePointerLockError)
+      element.removeEventListener('mousedown', handleMouseDown)
+      document.removeEventListener('mouseup', handleMouseUp)
       document.removeEventListener('mousemove', handleMouseMove)
       element.removeEventListener('wheel', handleWheel)
       element.removeEventListener('touchstart', handleTouchStart)

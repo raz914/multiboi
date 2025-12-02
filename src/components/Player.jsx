@@ -1,4 +1,4 @@
-import { useFBX, useAnimations, useGLTF } from '@react-three/drei'
+import { useAnimations, useGLTF } from '@react-three/drei'
 import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -12,8 +12,8 @@ const SYNC_INTERVAL = 0.01
 const UP = new THREE.Vector3(0, 1, 0)
 
 const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, ref) => {
-  const baseModel = useFBX('/player/aj.fbx')
-  const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
+  const baseModel = useGLTF('/player/DefaultAvatar.glb')
+  const fbx = useMemo(() => (baseModel?.scene ? cloneSkeleton(baseModel.scene) : null), [baseModel])
   const playerRef = useRef()
   const groupRef = useRef()
   const rigidBodyRef = useRef()
@@ -23,57 +23,30 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
   // Expose the rigid body ref to parent (for camera to follow)
   useImperativeHandle(ref, () => rigidBodyRef.current)
   
-  // Load all animation files
-  const idleAnim = useGLTF('/anims/idle.glb')
-  const forwardAnim = useGLTF('/anims/forward.glb')
-  const backwardAnim = useGLTF('/anims/back.glb')
-  const leftAnim = useGLTF('/anims/left.glb')
-  const rightAnim = useGLTF('/anims/right.glb')
-  
   // Get keyboard input
   const keys = useKeyboard()
   const { broadcastState, state: multiplayerState } = useMultiplayer()
   const { movementRef } = useInput()
   
-  // Create proper animation clips with explicit names (memoized to avoid recreation)
+  // Use built-in animations from the model
   const animations = useMemo(() => {
-    const sourceClips = [
-      idleAnim.animations?.[0],
-      forwardAnim.animations?.[0],
-      backwardAnim.animations?.[0],
-      leftAnim.animations?.[0],
-      rightAnim.animations?.[0],
-    ]
-
-    const names = ['idle', 'forward', 'backward', 'left', 'right']
-
-    const prepared = sourceClips
-      .map((clip, index) => {
-        if (!clip) return null
-        const cloned = clip.clone()
-        cloned.name = names[index]
-        return cloned
-      })
-      .filter(Boolean)
-
-    return prepared
-  }, [idleAnim, forwardAnim, backwardAnim, leftAnim, rightAnim])
+    if (!baseModel?.animations) return []
+    console.log('[Player] Available animations:', baseModel.animations.map(a => a.name))
+    return baseModel.animations
+  }, [baseModel])
   
   // Setup animations
-  const { actions, mixer, clips } = useAnimations(animations, playerRef)
+  const { actions, mixer } = useAnimations(animations, playerRef)
   
   // Player state
   const velocity = useRef(new THREE.Vector3())
-  const direction = useRef(new THREE.Vector3())
   const currentAction = useRef(null)
-  const cameraForward = useRef(new THREE.Vector3())
-  const cameraRight = useRef(new THREE.Vector3())
-  const lastRotation = useRef(0)
+  const playerRotation = useRef(0) // Player's own rotation
   
   useEffect(() => {
     if (fbx) {
       // Scale down the player if needed
-      fbx.scale.set(0.01, 0.01, 0.01)
+      fbx.scale.set(0.8, 0.8, 0.8)
       
       // Traverse and set up materials
       fbx.traverse((child) => {
@@ -107,16 +80,9 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
   
   // Animation handling - Play idle by default and set all animations to loop
   useEffect(() => {
-    if (actions) {
+    if (actions && Object.keys(actions).length > 0) {
       const availableActions = Object.keys(actions)
       console.log('[Player] Actions initialized:', availableActions)
-      availableActions.forEach((name) => {
-        const clip = actions[name]?.getClip ? actions[name].getClip() : clips?.find((c) => c.name === name)
-        console.log('[Player] Clip info:', name, {
-          duration: clip?.duration,
-          tracks: clip?.tracks?.length,
-        })
-      })
 
       // Set all animations to loop
       Object.entries(actions).forEach(([name, action]) => {
@@ -124,18 +90,18 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
           action.setLoop(THREE.LoopRepeat, Infinity)
           action.clampWhenFinished = false
           action.enabled = true
-          console.log('[Player] Prepared action for looping:', name)
         }
       })
       
-      // Play idle animation by default
-      if (actions['idle']) {
+      // Play idle animation by default (check for both 'idle' and 'Idle')
+      const idleAction = actions['idle'] || actions['Idle'] || Object.values(actions)[0]
+      if (idleAction) {
         console.log('[Player] Playing default idle action')
-        actions['idle'].reset().play()
+        idleAction.reset().play()
         currentAction.current = 'idle'
       }
     }
-  }, [actions, clips])
+  }, [actions])
 
   // Debug mixer events
   useEffect(() => {
@@ -174,114 +140,109 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
     const character = playerRef.current
     if (!body || !character) return
 
-    const moveSpeed = keys.shift ? 8 : 4
-    direction.current.set(0, 0, 0)
+    const moveSpeed = keys.shift ? 4 : 2.3
 
-    // Calculate camera aligned movement vectors
-    frameState.camera.getWorldDirection(cameraForward.current)
-    cameraForward.current.y = 0
-    if (cameraForward.current.lengthSq() === 0) {
-      cameraForward.current.set(0, 0, -1)
-    } else {
-      cameraForward.current.normalize()
-    }
-
-    cameraRight.current.crossVectors(cameraForward.current, UP)
-    if (cameraRight.current.lengthSq() === 0) {
-      cameraRight.current.set(1, 0, 0)
-    } else {
-      cameraRight.current.normalize()
-    }
-
+    // Get joystick input
     const joystickMovement = movementRef?.current ?? { x: 0, y: 0 }
 
-    const keyboardForwardAxis = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0)
-    const keyboardRightAxis = (keys.right ? 1 : 0) - (keys.left ? 1 : 0)
+    // Calculate input direction from keys (allows diagonal movement)
+    const keyboardX = (keys.left ? 1 : 0) - (keys.right ? 1 : 0) // Left is positive, right is negative
+    const keyboardZ = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0) // Forward is positive, backward is negative
 
-    const combinedForward = THREE.MathUtils.clamp(keyboardForwardAxis + joystickMovement.y, -1, 1)
-    const combinedRight = THREE.MathUtils.clamp(keyboardRightAxis + joystickMovement.x, -1, 1)
+    // Combine keyboard and joystick inputs
+    // Joystick: x is horizontal (invert so left is positive to match keyboard), y is vertical (forward positive)
+    const inputX = THREE.MathUtils.clamp(keyboardX - joystickMovement.x, -1, 1)
+    const inputZ = THREE.MathUtils.clamp(keyboardZ + joystickMovement.y, -1, 1)
 
-    const inputMagnitude = Math.min(1, Math.hypot(combinedRight, combinedForward))
+    const isMoving = Math.abs(inputX) > 0.1 || Math.abs(inputZ) > 0.1
 
-    if (inputMagnitude > 0) {
-      direction.current.copy(cameraForward.current).multiplyScalar(combinedForward)
-      direction.current.addScaledVector(cameraRight.current, combinedRight)
-      if (direction.current.lengthSq() > 0) {
-        direction.current.normalize()
-      }
-    } else {
-      direction.current.set(0, 0, 0)
-    }
+    // Determine animation
+    const newAction = isMoving ? 'Walk' : 'idle'
 
-    // Determine movement direction and animation
-    let newAction = 'idle'
-    if (inputMagnitude > 0.1) {
-      if (Math.abs(combinedForward) >= Math.abs(combinedRight)) {
-        newAction = combinedForward >= 0 ? 'forward' : 'backward'
-      } else {
-        newAction = combinedRight >= 0 ? 'right' : 'left'
-      }
-    }
-
-    // Update velocity using physics
+    // Calculate movement direction based on player rotation
     const currentVel = body.linvel()
-    velocity.current.x = direction.current.x * moveSpeed * inputMagnitude
-    velocity.current.z = direction.current.z * moveSpeed * inputMagnitude
+    if (isMoving) {
+      // Calculate the angle from input (relative to camera)
+      // atan2 gives us the angle for the direction vector
+      playerRotation.current = Math.atan2(inputX, inputZ)
 
-    // Set velocity on rigid body (keep Y velocity for gravity)
-    body.setLinvel(
-      {
-        x: velocity.current.x,
-        y: currentVel.y,
-        z: velocity.current.z,
-      },
-      true,
-    )
+      // Get camera forward direction for reference
+      const cameraForward = new THREE.Vector3()
+      frameState.camera.getWorldDirection(cameraForward)
+      cameraForward.y = 0
+      cameraForward.normalize()
 
-    // Rotate player to face movement direction
-    if (direction.current.length() > 0 && inputMagnitude > 0.1) {
-      const angle = Math.atan2(direction.current.x, direction.current.z)
-      lastRotation.current = angle
+      // Calculate camera's yaw angle
+      const cameraAngle = Math.atan2(cameraForward.x, cameraForward.z)
+      
+      // Combine camera angle with player rotation
+      const totalAngle = cameraAngle + playerRotation.current
+
+      // Calculate input magnitude for analog control support (joystick can have partial values)
+      const inputLength = Math.sqrt(inputX * inputX + inputZ * inputZ)
+      const inputMagnitude = Math.min(1, inputLength) // Clamp to max of 1
+
+      // Calculate velocity in the direction player is facing
+      // Use inputMagnitude to support analog joystick (partial movement)
+      velocity.current.x = Math.sin(totalAngle) * moveSpeed * inputMagnitude
+      velocity.current.z = Math.cos(totalAngle) * moveSpeed * inputMagnitude
+
+      // Set velocity
+      body.setLinvel(
+        {
+          x: velocity.current.x,
+          y: currentVel.y,
+          z: velocity.current.z,
+        },
+        true,
+      )
+
+      // Rotate player model to face movement direction
       const quat = new THREE.Quaternion()
-      quat.setFromAxisAngle(UP, angle)
+      quat.setFromAxisAngle(UP, totalAngle)
       body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
     } else {
-      // When idle, maintain the last rotation
-      const quat = new THREE.Quaternion()
-      quat.setFromAxisAngle(UP, lastRotation.current)
-      body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
+      // Stop horizontal movement when not pressing keys
+      body.setLinvel(
+        {
+          x: 0,
+          y: currentVel.y,
+          z: 0,
+        },
+        true,
+      )
+      // Reset rotation offset when idle
+      playerRotation.current = 0
     }
 
     // Always set angular velocity to zero to prevent spinning
     body.setAngvel({ x: 0, y: 0, z: 0 }, true)
 
-    // Switch animations
-    if (newAction !== currentAction.current && actions && actions[newAction]) {
-      const prevAction = currentAction.current ? actions[currentAction.current] : null
-      const nextAction = actions[newAction]
+    // Switch animations (check for both 'idle'/'Idle' and 'Walk')
+    const idleAction = actions?.['idle'] || actions?.['Idle']
+    const walkAction = actions?.['Walk'] || actions?.['walk']
+    
+    const targetAction = newAction === 'Walk' ? walkAction : idleAction
+    const targetName = newAction === 'Walk' ? 'Walk' : 'idle'
 
-      if (nextAction) {
-        console.log('[Player] Switching animation:', {
-          from: currentAction.current,
-          to: newAction,
-          nextDuration: nextAction?.getClip?.()?.duration,
-          prevDuration: prevAction?.getClip?.()?.duration,
-        })
-        if (prevAction && typeof prevAction.fadeOut === 'function') {
-          prevAction.fadeOut(0.2)
-        }
+    if (targetAction && targetName !== currentAction.current) {
+      const prevActionName = currentAction.current
+      const prevAction = prevActionName === 'Walk' ? walkAction : idleAction
 
-        nextAction.setLoop(THREE.LoopRepeat, Infinity)
-        nextAction.clampWhenFinished = false
-        nextAction.enabled = true
-        nextAction.time = 0
-        nextAction.timeScale = 1
-        nextAction.paused = false
-        nextAction.fadeIn(0.2)
-        nextAction.play()
+      console.log('[Player] Switching animation:', {
+        from: prevActionName,
+        to: targetName,
+      })
 
-        currentAction.current = newAction
+      if (prevAction && typeof prevAction.fadeOut === 'function') {
+        prevAction.fadeOut(0.2)
       }
+
+      targetAction.reset()
+      targetAction.fadeIn(0.2)
+      targetAction.play()
+
+      currentAction.current = targetName
     }
 
     const inRoom =
@@ -290,11 +251,7 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
     if (inRoom) {
       const elapsed = frameState.clock.elapsedTime
       if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
-        const syncVelocity = [
-          direction.current.x * moveSpeed * inputMagnitude,
-          0,
-          direction.current.z * moveSpeed * inputMagnitude,
-        ]
+        const syncVelocity = isMoving ? [velocity.current.x, 0, velocity.current.z] : [0, 0, 0]
 
         const pos = body.translation()
         const rot = body.rotation()
@@ -324,7 +281,13 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
       mass={1}
       type="dynamic"
     >
-      <CapsuleCollider args={[0.5, 0.5]} position={[0, 1, 0]} />
+      <CapsuleCollider args={[0.1, 0.5]} position={[0, 0.5, 0]}>
+        {/* Debug visualization */}
+        {/* <mesh position={[0, 0, 0]}>
+          <capsuleGeometry args={[0.11, 0.5, 8, 16]} />
+          <meshBasicMaterial color="lime" wireframe />
+        </mesh> */}
+      </CapsuleCollider>
       <group ref={groupRef}>
         <primitive 
           ref={playerRef}
@@ -337,12 +300,8 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
 
 Player.displayName = 'Player'
 
-// Preload animations
-useGLTF.preload('/anims/idle.glb')
-useGLTF.preload('/anims/forward.glb')
-useGLTF.preload('/anims/back.glb')
-useGLTF.preload('/anims/left.glb')
-useGLTF.preload('/anims/right.glb')
+// Preload model (includes built-in animations)
+useGLTF.preload('/player/DefaultAvatar.glb')
 
 export default Player
 

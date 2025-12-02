@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html, useFBX, useGLTF, useAnimations } from '@react-three/drei'
+import { Html, useGLTF, useAnimations } from '@react-three/drei'
 import { RigidBody, CapsuleCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -12,8 +12,8 @@ const clampVectorArray = (values = []) => {
 }
 
 const RemotePlayer = ({ player, isActive = true }) => {
-  const baseModel = useFBX('/player/aj.fbx')
-  const fbx = useMemo(() => (baseModel ? cloneSkeleton(baseModel) : null), [baseModel])
+  const baseModel = useGLTF('/player/DefaultAvatar.glb')
+  const fbx = useMemo(() => (baseModel?.scene ? cloneSkeleton(baseModel.scene) : null), [baseModel])
   const playerRef = useRef()
   const groupRef = useRef()
   const rigidBodyRef = useRef()
@@ -21,38 +21,18 @@ const RemotePlayer = ({ player, isActive = true }) => {
   const targetRotation = useRef(0)
   const currentAction = useRef(null)
 
-  const idleAnim = useGLTF('/anims/idle.glb')
-  const forwardAnim = useGLTF('/anims/forward.glb')
-  const backwardAnim = useGLTF('/anims/back.glb')
-  const leftAnim = useGLTF('/anims/left.glb')
-  const rightAnim = useGLTF('/anims/right.glb')
-
+  // Use built-in animations from the model
   const animations = useMemo(() => {
-    const sourceClips = [
-      idleAnim.animations?.[0],
-      forwardAnim.animations?.[0],
-      backwardAnim.animations?.[0],
-      leftAnim.animations?.[0],
-      rightAnim.animations?.[0],
-    ]
-
-    const names = ['idle', 'forward', 'backward', 'left', 'right']
-
-    return sourceClips
-      .map((clip, index) => {
-        if (!clip) return null
-        const cloned = clip.clone()
-        cloned.name = names[index]
-        return cloned
-      })
-      .filter(Boolean)
-  }, [idleAnim, forwardAnim, backwardAnim, leftAnim, rightAnim])
+    if (!baseModel?.animations) return []
+    console.log('[RemotePlayer] Available animations:', baseModel.animations.map(a => a.name))
+    return baseModel.animations
+  }, [baseModel])
 
   const { actions } = useAnimations(animations, playerRef)
 
   useEffect(() => {
     if (fbx) {
-      fbx.scale.set(0.01, 0.01, 0.01)
+      fbx.scale.set(0.8, 0.8, 0.8)
       fbx.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true
@@ -63,7 +43,7 @@ const RemotePlayer = ({ player, isActive = true }) => {
   }, [fbx])
 
   useEffect(() => {
-    if (!actions) return
+    if (!actions || Object.keys(actions).length === 0) return
 
     Object.values(actions).forEach((action) => {
       if (action) {
@@ -73,8 +53,10 @@ const RemotePlayer = ({ player, isActive = true }) => {
       }
     })
 
-    if (actions.idle && !currentAction.current) {
-      actions.idle.reset().play()
+    // Play idle animation by default (check for both 'idle' and 'Idle')
+    const idleAction = actions['idle'] || actions['Idle']
+    if (idleAction && !currentAction.current) {
+      idleAction.reset().play()
       currentAction.current = 'idle'
     }
   }, [actions])
@@ -95,12 +77,17 @@ const RemotePlayer = ({ player, isActive = true }) => {
 
     if (currentAction.current === nextActionName) return
 
-    const nextAction = actions[nextActionName]
+    // Map action names to actual animation names (support both cases)
+    const idleAction = actions['idle'] || actions['Idle']
+    const walkAction = actions['Walk'] || actions['walk']
+    
+    const nextAction = nextActionName === 'Walk' ? walkAction : idleAction
     if (!nextAction) return
 
-    const prevAction = currentAction.current ? actions[currentAction.current] : null
+    const prevActionName = currentAction.current
+    const prevAction = prevActionName === 'Walk' ? walkAction : idleAction
 
-    if (prevAction && typeof prevAction.fadeOut === 'function') {
+    if (prevAction && prevAction !== nextAction && typeof prevAction.fadeOut === 'function') {
       prevAction.fadeOut(0.2)
     }
 
@@ -171,12 +158,8 @@ const RemotePlayer = ({ player, isActive = true }) => {
 
 export default RemotePlayer
 
-useFBX.preload('/player/aj.fbx')
-useGLTF.preload('/anims/idle.glb')
-useGLTF.preload('/anims/forward.glb')
-useGLTF.preload('/anims/back.glb')
-useGLTF.preload('/anims/left.glb')
-useGLTF.preload('/anims/right.glb')
+// Preload model (includes built-in animations)
+useGLTF.preload('/player/DefaultAvatar.glb')
 
 
 

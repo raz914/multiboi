@@ -11,7 +11,7 @@ export const useScene = () => {
 }
 
 export const SceneProvider = ({ children }) => {
-  const [currentScene, setCurrentScene] = useState('main')
+  const [currentScene, setCurrentScene] = useState('opera')
   const [isTransitioning, setIsTransitioning] = useState(false)
   
   const changeScene = useCallback((sceneName) => {

@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 
-function Coin({ data, onCollect }) {
+function Coin({ data, onCollect, disableAnimation = false }) {
   const { geometry, material, position, quaternion, scale, halfExtents } = data
   const coinRef = useRef()
   const [isCollected, setIsCollected] = useState(false)
@@ -13,9 +13,8 @@ function Coin({ data, onCollect }) {
   }, [geometry, material])
 
   useFrame((_, delta) => {
-    if (coinRef.current && !isCollected) {
-      coinRef.current.rotation.y += delta * 2
-    }
+    if (disableAnimation || isCollected || !coinRef.current) return
+    coinRef.current.rotation.y += delta * 2
   })
 
   const handleIntersection = () => {
@@ -34,7 +33,7 @@ function Coin({ data, onCollect }) {
       colliders={false}
       position={position}
       quaternion={quaternion}
-      activeEvents={["intersectionEnter"]}
+      activeEvents={['intersectionEnter']}
       onIntersectionEnter={handleIntersection}
     >
       <CuboidCollider args={halfExtents} sensor />

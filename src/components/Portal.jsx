@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
 
-function Portal({ data, onEnter }) {
+function Portal({ data, onEnter, disableAnimation = false }) {
   const { geometry, material, position, quaternion, scale, halfExtents, targetScene } = data
   const portalRef = useRef()
   const [hasTriggered, setHasTriggered] = useState(false)
@@ -16,7 +16,7 @@ function Portal({ data, onEnter }) {
   }, [geometry, material])
 
   useFrame((state, delta) => {
-    if (!portalRef.current) return
+    if (!portalRef.current || disableAnimation) return
     portalRef.current.rotation.y += delta * 1.5
     const pulseScale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.1
     portalRef.current.scale.set(
