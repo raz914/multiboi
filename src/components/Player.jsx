@@ -6,7 +6,7 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 import { RigidBody, CapsuleCollider } from '@react-three/rapier'
 import { useKeyboard } from '../hooks/useKeyboard'
 import { useInput } from '../context/InputContext'
-import { useMultiplayer } from '../context/MultiplayerContext'
+// import { useMultiplayer } from '../context/MultiplayerContext' // DISABLED FOR SINGLE-PLAYER
 
 const SYNC_INTERVAL = 0.01
 const UP = new THREE.Vector3(0, 1, 0)
@@ -25,7 +25,7 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
   
   // Get keyboard input
   const keys = useKeyboard()
-  const { broadcastState, state: multiplayerState } = useMultiplayer()
+  // const { broadcastState, state: multiplayerState } = useMultiplayer() // DISABLED FOR SINGLE-PLAYER
   const { movementRef } = useInput()
   
   // Use built-in animations from the model
@@ -245,28 +245,29 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
       currentAction.current = targetName
     }
 
-    const inRoom =
-      multiplayerState.roomCode && (multiplayerState.status === 'hosting' || multiplayerState.status === 'connected')
+    // DISABLED FOR SINGLE-PLAYER - Multiplayer state broadcasting
+    // const inRoom =
+    //   multiplayerState.roomCode && (multiplayerState.status === 'hosting' || multiplayerState.status === 'connected')
 
-    if (inRoom) {
-      const elapsed = frameState.clock.elapsedTime
-      if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
-        const syncVelocity = isMoving ? [velocity.current.x, 0, velocity.current.z] : [0, 0, 0]
+    // if (inRoom) {
+    //   const elapsed = frameState.clock.elapsedTime
+    //   if (elapsed - lastSyncTime.current >= SYNC_INTERVAL) {
+    //     const syncVelocity = isMoving ? [velocity.current.x, 0, velocity.current.z] : [0, 0, 0]
 
-        const pos = body.translation()
-        const rot = body.rotation()
-        const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w))
+    //     const pos = body.translation()
+    //     const rot = body.rotation()
+    //     const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w))
 
-        broadcastState({
-          position: [pos.x, pos.y, pos.z],
-          rotation: euler.y,
-          action: currentAction.current || 'idle',
-          velocity: syncVelocity,
-        })
+    //     broadcastState({
+    //       position: [pos.x, pos.y, pos.z],
+    //       rotation: euler.y,
+    //       action: currentAction.current || 'idle',
+    //       velocity: syncVelocity,
+    //     })
 
-        lastSyncTime.current = elapsed
-      }
-    }
+    //     lastSyncTime.current = elapsed
+    //   }
+    // }
   })
   
   if (!fbx) return null

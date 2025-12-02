@@ -6,27 +6,28 @@ import * as THREE from 'three'
 import Environment from './components/Environment'
 import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
-import LobbyModal from './components/LobbyModal'
-import RemotePlayer from './components/RemotePlayer'
+// import LobbyModal from './components/LobbyModal' // DISABLED FOR SINGLE-PLAYER
+// import RemotePlayer from './components/RemotePlayer' // DISABLED FOR SINGLE-PLAYER
 import MobileJoystick from './components/MobileJoystick'
 import LoadingScreen from './components/LoadingScreen'
 import CoinCounter from './components/CoinCounter'
 import IframeModal from './components/IframeModal'
 import InteractionPrompt from './components/InteractionPrompt'
 import HDRBackground from './components/HDRBackground'
-import { useMultiplayer } from './context/MultiplayerContext'
+// import { useMultiplayer } from './context/MultiplayerContext' // DISABLED FOR SINGLE-PLAYER
 import { useHDRPreload } from './hooks/useHDRPreload'
 
 const SPAWN_POSITIONS = {
-  opera: [0, 1.2, 5],
+  opera: [0, 3, -11.1],
   reception: [0, 0.5, 5],
+  operainside: [6, 8, 5],
 }
 
 function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, hdrTexture }) {
   const playerRef = useRef()
-  const { remotePlayers } = useMultiplayer()
+  // const { remotePlayers } = useMultiplayer() // DISABLED FOR SINGLE-PLAYER
   const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.opera, [currentScene])
-  const cameraOffset = useMemo(() => [0, 5, 10], [])
+  const cameraOffset = useMemo(() => [0, 5, -10], [])
   const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
   const [environmentReady, setEnvironmentReady] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
@@ -110,11 +111,12 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
           />
         </Suspense>
 
-        <Suspense fallback={null}>
+        {/* DISABLED FOR SINGLE-PLAYER */}
+        {/* <Suspense fallback={null}>
           {remotePlayers.map((player) => (
             <RemotePlayer key={player.id} player={player} isActive={environmentReady} />
           ))}
-        </Suspense>
+        </Suspense> */}
       </Physics>
 
       {/* 3rd Person Camera follows player */}
@@ -125,25 +127,26 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
 
 function App() {
   // Preload HDR before scene renders
-  const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload('/hdr/main.hdr')
+  const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload('/hdr/outsideOpera.hdr')
   
-  const [isLobbyOpen, setLobbyOpen] = useState(true)
+  // const [isLobbyOpen, setLobbyOpen] = useState(true) // DISABLED FOR SINGLE-PLAYER
   const [coinData, setCoinData] = useState({ collected: 0, total: 0 })
   const [currentScene, setCurrentScene] = useState('opera')
   const [sceneReady, setSceneReady] = useState(false)
   const [isSceneLoading, setIsSceneLoading] = useState(true)
   const [isPerformanceMode, setPerformanceMode] = useState(false)
   const [iframeModal, setIframeModal] = useState({ isOpen: false, url: '', title: '' })
-  const [nearbyMesh, setNearbyMesh] = useState(null)
-  const {
-    state: { roomCode, playerName, isHost, status, players, error },
-    createRoom,
-    joinRoom,
-    resetState,
-    connectionState,
-    availableRooms,
-    refreshRooms,
-  } = useMultiplayer()
+  const [nearbyInteraction, setNearbyInteraction] = useState({ meshName: null, type: null, message: null })
+  // DISABLED FOR SINGLE-PLAYER
+  // const {
+  //   state: { roomCode, playerName, isHost, status, players, error },
+  //   createRoom,
+  //   joinRoom,
+  //   resetState,
+  //   connectionState,
+  //   availableRooms,
+  //   refreshRooms,
+  // } = useMultiplayer()
 
   // Log HDR loading status
   useEffect(() => {
@@ -186,12 +189,12 @@ function App() {
     setIframeModal({ isOpen: false, url: '', title: '' })
   }, [])
 
-  const handleProximityChange = useCallback((isNear, meshName) => {
+  const handleProximityChange = useCallback((isNear, meshName, type, message) => {
     if (isNear) {
-      setNearbyMesh(meshName)
+      setNearbyInteraction({ meshName, type, message })
     } else {
       // Only clear if this mesh is the currently tracked one
-      setNearbyMesh(prev => prev === meshName ? null : prev)
+      setNearbyInteraction(prev => prev.meshName === meshName ? { meshName: null, type: null, message: null } : prev)
     }
   }, [])
 
@@ -237,8 +240,8 @@ function App() {
       
       {/* Interaction Prompt */}
       <InteractionPrompt 
-        isVisible={!!nearbyMesh && !iframeModal.isOpen} 
-        message="Click on wall poster to view content" 
+        isVisible={!!nearbyInteraction.meshName && !iframeModal.isOpen} 
+        message={nearbyInteraction.message || 'Press E to interact'} 
       />
       
       {/* Iframe Modal */}
@@ -250,9 +253,10 @@ function App() {
       />
       {/* Scene indicator */}
       <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-70 px-4 py-2 rounded-lg text-white text-sm font-semibold">
-        {currentScene === 'opera' ? '🎭 Opera House' : '🏢 Reception'}
+        {currentScene === 'opera' ? '🎭 Opera House' : currentScene === 'operainside' ? '🎭 Inside Opera' : '🏢 Reception'}
       </div>
-      <LobbyModal
+      {/* DISABLED FOR SINGLE-PLAYER */}
+      {/* <LobbyModal
         isOpen={isLobbyOpen}
         onClose={() => setLobbyOpen(false)}
         onCreateRoom={async (name) => {
@@ -273,7 +277,7 @@ function App() {
         serverError={error}
         availableRooms={availableRooms}
         onRefreshRooms={refreshRooms}
-      />
+      /> */}
     </div>
   )
 }

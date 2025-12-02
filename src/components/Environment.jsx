@@ -8,6 +8,7 @@ import SceneVideoPlane from './SceneVideoPlane'
 import ClickableMesh from './ClickableMesh'
 import TreeColliders from './TreeColliders'
 import CustomCollider from './CustomCollider'
+import CommentaryAvatar from './CommentaryAvatar'
 import useClickableObjects from '../hooks/useClickableObjects'
 
 THREE.Cache.enabled = true
@@ -24,6 +25,10 @@ const SCENE_CONFIGS = {
   opera: {
     path: '/environment/opera.glb',
     name: 'Opera House',
+  },
+  operainside: {
+    path: '/environment/operainside.glb',
+    name: 'Inside Opera',
   }
 }
 
@@ -33,18 +38,54 @@ const tempScale = new THREE.Vector3()
 const tempBox = new THREE.Box3()
 const tempSize = new THREE.Vector3()
 
-const VIDEO_CONFIG = {
-  planeName: 'plane010_1',
-  src: '/videos/opera-promo.mp4',
+const VIDEO_CONFIGS = [
+  {
+    planeName: 'plane013',
+    src: '/videos/opera-promo.mp4',
+  },
+  {
+    planeName: 'plane010_1',
+    src: '/videos/opera-promo.mp4', // You can change this to a different video
+  },
+]
+
+// Interactive objects configuration for opera scene
+const INTERACTIVE_OBJECTS = {
+  // Wall posters
+  posters: {
+    type: 'poster',
+    meshNames: ['cube029', 'cube028', 'cube027', 'cube026', 'cube025', 'cube024', 'cube020'],
+    url: 'https://globalchessleague.com/',
+    promptMessage: 'Click on wall poster to view content',
+  },
+  // Arcade machines (pac man)
+  arcade: {
+    type: 'arcade',
+    meshNames: ['pac_man_machine_automat_0004', 'pac_man_machine_automat_0003'], // Add your actual mesh names here
+    url: 'https://dart-hit.netlify.app/', // Classic Google Pac-Man game
+    promptMessage: 'Click on arcade machine to play',
+  },
+  // Room switch - transitions to inside opera scene
+  roomSwitch: {
+    type: 'scene_switch',
+    meshNames: ['room_swich'], // Note: mesh name has typo in GLB file
+    targetScene: 'operainside',
+    promptMessage: 'Press E to enter the Opera',
+  },
 }
 
-// Clickable meshes configuration for opera scene
-const CLICKABLE_MESHES = ['cube029', 'cube028','cube027','cube026','cube025','cube024','cube020']
+// Flatten all clickable mesh names for detection
+const CLICKABLE_MESHES = Object.values(INTERACTIVE_OBJECTS).flatMap(obj => obj.meshNames)
 
-// URLs for each clickable mesh (you can customize these)
-const MESH_URLS = {
-  cube020: 'https://globalchessleague.com/',
-  cube020_1: 'https://globalchessleague.com/',
+// Helper function to get interactive object config by mesh name
+const getInteractiveConfig = (meshName) => {
+  const nameLower = meshName.toLowerCase()
+  for (const config of Object.values(INTERACTIVE_OBJECTS)) {
+    if (config.meshNames.some(name => nameLower.includes(name.toLowerCase()))) {
+      return config
+    }
+  }
+  return INTERACTIVE_OBJECTS.posters // Default fallback
 }
 
 function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, disableAnimations = false, onMeshClick, onProximityChange, playerRef }) {
@@ -56,10 +97,10 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
   const [coinsCollected, setCoinsCollected] = useState(0)
   const [enterPortals, setEnterPortals] = useState([])
   const [exitPortals, setExitPortals] = useState([])
-  const [videoPlane, setVideoPlane] = useState(null)
+  const [videoPlanes, setVideoPlanes] = useState([])
   const [treeScene, setTreeScene] = useState(null)
   const notifiedReadyRef = useRef(false)
-  const videoPlaneNameLower = VIDEO_CONFIG.planeName.toLowerCase()
+  const videoPlaneNamesLower = VIDEO_CONFIGS.map(config => config.planeName.toLowerCase())
 
   // Extract clickable objects from the scene (only for opera scene)
   const clickableObjects = useClickableObjects(
@@ -107,7 +148,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
       }
       
       if (
-        childName === videoPlaneNameLower ||
+        videoPlaneNamesLower.includes(childName) ||
         childName.includes('coin') ||
         childName.includes('enter') ||
         childName.includes('exit') ||
@@ -155,7 +196,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
       setCoins([])
       setEnterPortals([])
       setExitPortals([])
-      setVideoPlane(null)
+      setVideoPlanes([])
       return
     }
 
@@ -164,7 +205,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
     const coinConfigs = []
     const enterConfigs = []
     const exitConfigs = []
-    let planeConfig = null
+    const planeConfigs = []
 
     originalScene.traverse((child) => {
       if (!child?.isMesh) return
@@ -177,15 +218,18 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
 
       const childName = child.name.toLowerCase()
 
-      if (childName === videoPlaneNameLower && !planeConfig) {
-        planeConfig = {
+      // Check if this mesh is a video plane
+      const videoConfigIndex = videoPlaneNamesLower.findIndex(name => name === childName)
+      if (videoConfigIndex !== -1) {
+        planeConfigs.push({
           id: child.uuid,
           geometry: child.geometry.clone(),
           material: child.material.clone(),
           position: [tempPosition.x, tempPosition.y, tempPosition.z],
           quaternion: [tempQuaternion.x, tempQuaternion.y, tempQuaternion.z, tempQuaternion.w],
           scale: [tempScale.x, tempScale.y, tempScale.z],
-        }
+          videoSrc: VIDEO_CONFIGS[videoConfigIndex].src,
+        })
         return
       }
 
@@ -224,11 +268,12 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
     setCoins(coinConfigs)
     setEnterPortals(enterConfigs)
     setExitPortals(exitConfigs)
-    setVideoPlane(planeConfig)
+    setVideoPlanes(planeConfigs)
 
     console.log('[Environment] Coins configured:', coinConfigs.length)
     console.log('[Environment] Enter portals configured:', enterConfigs.length)
     console.log('[Environment] Exit portals configured:', exitConfigs.length)
+    console.log('[Environment] Video planes configured:', planeConfigs.length)
   }, [originalScene])
 
   useEffect(() => {
@@ -253,14 +298,24 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
   }
 
   const handleMeshClick = (meshName) => {
-    const url = MESH_URLS[meshName] || 'https://globalchessleague.com/'
-    console.log('[Environment] Mesh clicked:', meshName, 'URL:', url)
-    onMeshClick?.(url, meshName)
+    const config = getInteractiveConfig(meshName)
+    console.log('[Environment] Mesh clicked:', meshName, 'Type:', config.type)
+    
+    // Handle scene switch type differently
+    if (config.type === 'scene_switch' && config.targetScene) {
+      console.log('[Environment] Triggering scene switch to:', config.targetScene)
+      onPortalEnter?.(config.targetScene)
+      return
+    }
+    
+    // For other types, open the URL in iframe
+    onMeshClick?.(config.url, meshName, config.type)
   }
 
   const handleProximityChange = (isNear, meshName) => {
-    console.log('[Environment] Proximity changed:', meshName, isNear)
-    onProximityChange?.(isNear, meshName)
+    const config = getInteractiveConfig(meshName)
+    console.log('[Environment] Proximity changed:', meshName, isNear, 'Type:', config.type)
+    onProximityChange?.(isNear, meshName, config.type, config.promptMessage)
   }
 
   const renderedScene = useMemo(() => displayScene, [displayScene])
@@ -287,9 +342,9 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
         />
       )}
 
-      {videoPlane && (
-        <SceneVideoPlane key={videoPlane.id} data={videoPlane} videoSrc={VIDEO_CONFIG.src} />
-      )}
+      {videoPlanes.map((plane) => (
+        <SceneVideoPlane key={plane.id} data={plane} videoSrc={plane.videoSrc} />
+      ))}
 
       {coins.map((coin) => (
         <Coin key={coin.id} data={coin} onCollect={handleCoinCollect} disableAnimation={disableAnimations} />
@@ -330,6 +385,15 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
           />
         </>
       )}
+
+      {/* Commentary Avatar with looping animation (only in opera scene) */}
+      {sceneName === 'opera' && (
+        <CommentaryAvatar 
+          position={[0, 0, 0]} // Adjust position as needed
+          rotation={[0, 0, 0]} // Adjust rotation as needed
+          scale={1} // Adjust scale as needed
+        />
+      )}
     </>
   )
 }
@@ -337,6 +401,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
 // useGLTF.preload('/environment/Friendhouse outside.glb')
 // useGLTF.preload('/environment/reception.glb')
 useGLTF.preload('/environment/opera.glb')
+useGLTF.preload('/environment/operainside.glb')
 
 
 export default Environment
