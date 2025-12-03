@@ -6,26 +6,27 @@ import * as THREE from 'three'
 import Environment from './components/Environment'
 import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
-// import LobbyModal from './components/LobbyModal' // DISABLED FOR SINGLE-PLAYER
-// import RemotePlayer from './components/RemotePlayer' // DISABLED FOR SINGLE-PLAYER
 import MobileJoystick from './components/MobileJoystick'
 import LoadingScreen from './components/LoadingScreen'
 import CoinCounter from './components/CoinCounter'
 import IframeModal from './components/IframeModal'
 import InteractionPrompt from './components/InteractionPrompt'
 import HDRBackground from './components/HDRBackground'
-// import { useMultiplayer } from './context/MultiplayerContext' // DISABLED FOR SINGLE-PLAYER
 import { useHDRPreload } from './hooks/useHDRPreload'
 
+// Import new form components
+import UserForm from './components/UserForm'
+import InstructionScreen from './components/InstructionScreen'
+import WelcomeScreen from './components/WelcomeScreen'
+    
 const SPAWN_POSITIONS = {
   opera: [0, 3, -11.1],
   reception: [0, 0.5, 5],
   operainside: [6, 8, 5],
 }
 
-function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, hdrTexture }) {
+function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, hdrTexture, isFormCompleted }) {
   const playerRef = useRef()
-  // const { remotePlayers } = useMultiplayer() // DISABLED FOR SINGLE-PLAYER
   const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.opera, [currentScene])
   const cameraOffset = useMemo(() => [0, 5, -10], [])
   const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
@@ -55,8 +56,9 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
   }, [environmentReady])
 
   useEffect(() => {
-    onSceneReadyChange?.(environmentReady && playerReady)
-  }, [environmentReady, playerReady, onSceneReadyChange])
+    // Only report ready if form is completed
+    onSceneReadyChange?.(environmentReady && playerReady && isFormCompleted)
+  }, [environmentReady, playerReady, isFormCompleted, onSceneReadyChange])
 
   useEffect(() => {
     return () => {
@@ -76,51 +78,50 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
 
   return (
     <>
-      {/* HDR Background */}
-      <HDRBackground texture={hdrTexture} applyAsEnvironment={false} useFallback={true} />
+      {/* HDR Background - only show when form is completed */}
+      {isFormCompleted && (
+        <HDRBackground texture={hdrTexture} applyAsEnvironment={false} useFallback={true} />
+      )}
 
       {/* Lighting setup */}
       <ambientLight intensity={ambientIntensity} />
       <directionalLight position={[10, 10, 5]} intensity={directionalIntensity} castShadow={!isPerformanceMode} />
       <hemisphereLight intensity={hemisphereIntensity} groundColor="#444444" />
 
-      {/* Physics World */}
-      <Physics gravity={[0, -9.81, 0]} key={currentScene} paused={!environmentReady}>
-        {/* Load Environment first */}
-        <Suspense fallback={null}>
-          <Environment
-            key={currentScene}
-            onCoinData={onCoinData}
-            sceneName={currentScene}
-            onPortalEnter={handlePortalEnter}
-            onReady={handleEnvironmentReady}
-            disableAnimations={isPerformanceMode}
-            onMeshClick={onMeshClick}
-            onProximityChange={onProximityChange}
-            playerRef={playerRef}
-          />
-        </Suspense>
+      {/* Physics World - only active when form is completed */}
+      {isFormCompleted && (
+        <Physics gravity={[0, -9.81, 0]} key={currentScene} paused={!environmentReady}>
+          {/* Load Environment first */}
+          <Suspense fallback={null}>
+            <Environment
+              key={currentScene}
+              onCoinData={onCoinData}
+              sceneName={currentScene}
+              onPortalEnter={handlePortalEnter}
+              onReady={handleEnvironmentReady}
+              disableAnimations={isPerformanceMode}
+              onMeshClick={onMeshClick}
+              onProximityChange={onProximityChange}
+              playerRef={playerRef}
+            />
+          </Suspense>
 
-        <Suspense fallback={null}>
-          <Player
-            key={`player-${currentScene}`}
-            ref={playerRef}
-            position={playerPosition}
-            onReady={handlePlayerReady}
-            isActive={environmentReady}
-          />
-        </Suspense>
+          <Suspense fallback={null}>
+            <Player
+              key={`player-${currentScene}`}
+              ref={playerRef}
+              position={playerPosition}
+              onReady={handlePlayerReady}
+              isActive={environmentReady}
+            />
+          </Suspense>
+        </Physics>
+      )}
 
-        {/* DISABLED FOR SINGLE-PLAYER */}
-        {/* <Suspense fallback={null}>
-          {remotePlayers.map((player) => (
-            <RemotePlayer key={player.id} player={player} isActive={environmentReady} />
-          ))}
-        </Suspense> */}
-      </Physics>
-
-      {/* 3rd Person Camera follows player */}
-      <ThirdPersonCamera target={playerRef} offset={cameraOffset} lookAtOffset={cameraLookAtOffset} />
+      {/* 3rd Person Camera follows player - only when form is completed */}
+      {isFormCompleted && (
+        <ThirdPersonCamera target={playerRef} offset={cameraOffset} lookAtOffset={cameraLookAtOffset} />
+      )}
     </>
   )
 }
@@ -129,24 +130,22 @@ function App() {
   // Preload HDR before scene renders
   const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload('/hdr/outsideOpera.hdr')
   
-  // const [isLobbyOpen, setLobbyOpen] = useState(true) // DISABLED FOR SINGLE-PLAYER
+  // Loading and scene states
   const [coinData, setCoinData] = useState({ collected: 0, total: 0 })
   const [currentScene, setCurrentScene] = useState('opera')
   const [sceneReady, setSceneReady] = useState(false)
-  const [isSceneLoading, setIsSceneLoading] = useState(true)
   const [isPerformanceMode, setPerformanceMode] = useState(false)
   const [iframeModal, setIframeModal] = useState({ isOpen: false, url: '', title: '' })
   const [nearbyInteraction, setNearbyInteraction] = useState({ meshName: null, type: null, message: null })
-  // DISABLED FOR SINGLE-PLAYER
-  // const {
-  //   state: { roomCode, playerName, isHost, status, players, error },
-  //   createRoom,
-  //   joinRoom,
-  //   resetState,
-  //   connectionState,
-  //   availableRooms,
-  //   refreshRooms,
-  // } = useMultiplayer()
+  
+  // Form flow states - FIXED: showLoading starts as false
+  const [showForm, setShowForm] = useState(true)
+  const [showInstructions, setShowInstructions] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(false)
+  const [showLoading, setShowLoading] = useState(false) // Start as false, will show when needed
+  const [userData, setUserData] = useState(null)
+  const [isFormCompleted, setIsFormCompleted] = useState(false)
+  const [assetsLoaded, setAssetsLoaded] = useState(false)
 
   // Log HDR loading status
   useEffect(() => {
@@ -159,17 +158,52 @@ function App() {
     }
   }, [hdrTexture, hdrLoading, hdrError])
 
+  // Handle form submission
+  const handleFormSubmit = useCallback(() => {
+    setIsFormCompleted(true)
+    setShowForm(false)
+    setShowInstructions(true)
+    
+  }, [])
+
+  // Handle "Got It" from instructions
+  const handleGotIt = useCallback(() => {
+    setShowInstructions(false)
+    setShowWelcome(true)
+  }, [])
+
+  // Handle "Visit Royal Opera House" - SIMPLIFIED
+  const handleVisitRoyalOpera = useCallback(() => {
+    setShowWelcome(false)
+    // setShowLoading(true)
+  }, [])
+
+  // Handle loading completion
+  const handleLoadingComplete = useCallback(() => {
+    setShowLoading(false)
+  }, [])
+
   const handleSceneReadyChange = useCallback((ready) => {
     setSceneReady(ready)
-    setIsSceneLoading(!ready)
-  }, [])
+    
+    // If scene is ready and form is completed, assets are loaded
+    if (ready && isFormCompleted) {
+      setAssetsLoaded(true)
+      
+      // If we're showing loading screen and assets are now loaded, hide loading after delay
+      if (showLoading && ready) {
+        setTimeout(() => {
+          setShowLoading(false)
+        }, 1000)
+      }
+    }
+  }, [isFormCompleted, showLoading])
 
   const handleSceneChange = useCallback(
     (newScene) => {
       if (!newScene || newScene === currentScene) return
 
       setSceneReady(false)
-      setIsSceneLoading(true)
       setCoinData({ collected: 0, total: 0 })
       setCurrentScene(newScene)
     },
@@ -177,7 +211,6 @@ function App() {
   )
 
   const handleMeshClick = useCallback((url, meshName) => {
-    console.log('[App] Opening iframe for mesh:', meshName, 'URL:', url)
     setIframeModal({
       isOpen: true,
       url: url,
@@ -193,13 +226,15 @@ function App() {
     if (isNear) {
       setNearbyInteraction({ meshName, type, message })
     } else {
-      // Only clear if this mesh is the currently tracked one
       setNearbyInteraction(prev => prev.meshName === meshName ? { meshName: null, type: null, message: null } : prev)
     }
   }, [])
 
+  const shouldShowLoading = showLoading || (!assetsLoaded && isFormCompleted && !showForm && !showInstructions && !showWelcome)
+
   return (
     <div className="w-screen h-screen bg-gray-900">
+      {/* 3D Canvas - always render in background */}
       <Canvas
         camera={{ position: [5, 2, 5], fov: 80, far: 500 }}
         shadows={!isPerformanceMode}
@@ -211,9 +246,7 @@ function App() {
           stencil: false
         }}
         onCreated={({ gl, scene }) => {
-          // Set fallback background color
           scene.background = new THREE.Color(0x87CEEB)
-          console.log('[Canvas] Initialized with fallback background')
         }}
       >
         <PerformanceMonitor
@@ -231,53 +264,51 @@ function App() {
             isPerformanceMode={isPerformanceMode}
             onMeshClick={handleMeshClick}
             onProximityChange={handleProximityChange}
+            hdrTexture={hdrTexture}
+            isFormCompleted={isFormCompleted}
           />
         </PerformanceMonitor>
       </Canvas>
-      <LoadingScreen forceShow={isSceneLoading} />
-      <MobileJoystick />
-      {coinData.total > 0 && <CoinCounter collected={coinData.collected} total={coinData.total} />}
-      
-      {/* Interaction Prompt */}
-      <InteractionPrompt 
-        isVisible={!!nearbyInteraction.meshName && !iframeModal.isOpen} 
-        message={nearbyInteraction.message || 'Press E to interact'} 
-      />
-      
-      {/* Iframe Modal */}
-      <IframeModal
-        isOpen={iframeModal.isOpen}
-        onClose={handleCloseIframe}
-        url={iframeModal.url}
-        title={iframeModal.title}
-      />
-      {/* Scene indicator */}
-      <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-70 px-4 py-2 rounded-lg text-white text-sm font-semibold">
-        {currentScene === 'opera' ? '🎭 Opera House' : currentScene === 'operainside' ? '🎭 Inside Opera' : '🏢 Reception'}
-      </div>
-      {/* DISABLED FOR SINGLE-PLAYER */}
-      {/* <LobbyModal
-        isOpen={isLobbyOpen}
-        onClose={() => setLobbyOpen(false)}
-        onCreateRoom={async (name) => {
-          const result = await createRoom(name)
-          if (result?.success) {
-            console.log('[UI] Created room with code:', result.roomCode)
-          }
-          return result
-        }}
-        onJoinRoom={async (code, name) => {
-          const result = await joinRoom(code, name)
-          if (result?.success) {
-            console.log('[UI] Joined room with code:', result.roomCode)
-          }
-          return result
-        }}
-        connectionState={connectionState}
-        serverError={error}
-        availableRooms={availableRooms}
-        onRefreshRooms={refreshRooms}
-      /> */}
+
+      {showForm && (
+        <UserForm onSubmit={handleFormSubmit} />
+      )}
+
+      {showInstructions && (
+        <InstructionScreen onGotIt={handleGotIt} />
+      )}
+
+      {showWelcome && (
+        <WelcomeScreen onVisitRoyalOpera={handleVisitRoyalOpera} />
+      )}
+
+      {shouldShowLoading && (
+        <LoadingScreen 
+          forceShow={shouldShowLoading}
+          onComplete={handleLoadingComplete}
+          isFormCompleted={isFormCompleted}
+        />
+      )}
+
+      {isFormCompleted && !showForm && !showInstructions && !showWelcome && !shouldShowLoading && (
+        <>
+          <MobileJoystick />
+          {coinData.total > 0 && <CoinCounter collected={coinData.collected} total={coinData.total} />}
+          
+          <InteractionPrompt 
+            isVisible={!!nearbyInteraction.meshName && !iframeModal.isOpen} 
+            message={nearbyInteraction.message || 'Press E to interact'} 
+          />
+          
+          {/* Iframe Modal */}
+          <IframeModal
+            isOpen={iframeModal.isOpen}
+            onClose={handleCloseIframe}
+            url={iframeModal.url}
+            title={iframeModal.title}
+          />
+        </>
+      )}
     </div>
   )
 }

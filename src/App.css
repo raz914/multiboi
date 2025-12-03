@@ -40,3 +40,22 @@
 .read-the-docs {
   color: #888;
 }
+
+.gradient-border {
+  border: 1px solid;
+  border-image-source: linear-gradient(116.58deg, #7B0AD1 24.28%, rgba(255, 83, 192, 0.5) 52.53%);
+  border-image-slice: 1;
+}
+
+.selected-gradient-border {
+  border: 2px solid;
+  border-image-source: linear-gradient(115.29deg, #B6116B 15.07%, #3B1578 104.4%);
+  border-image-slice: 1;
+  background-color: #FFFF68;
+}
+
+.input-gradient-border {
+  border: 1px solid;
+  border-image-source: linear-gradient(116.58deg, #7B0AD1 24.28%, rgba(255, 83, 192, 0.5) 52.53%);
+  border-image-slice: 1;
+}
