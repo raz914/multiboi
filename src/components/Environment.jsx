@@ -65,7 +65,7 @@ const getSceneConfig = (sceneName) => {
   }
 }
 
-function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, disableAnimations = false, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive = false, playerRef }) {
+function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, disableAnimations = false, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive = false, playerRef, iframeOpen = false }) {
   const sceneConfig = SCENE_CONFIGS[sceneName] || SCENE_CONFIGS.opera
   const gltf = useGLTF(sceneConfig.path)
   const originalScene = gltf?.scene
@@ -339,7 +339,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
       ))}
 
       {coins.map((coin) => (
-        <Coin key={coin.id} data={coin} onCollect={handleCoinCollect} disableAnimation={disableAnimations} />
+        <Coin key={coin.id} data={coin} onCollect={handleCoinCollect} disableAnimation={false} />
       ))}
 
       {enterPortals.map((portal) => (
@@ -360,6 +360,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
           onClick={() => handleMeshClick(obj.name)}
           onProximityChange={handleProximityChange}
           playerRef={playerRef}
+          hideIndicators={iframeOpen}
         />
       ))}
 

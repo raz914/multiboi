@@ -1,9 +1,60 @@
 import { useRef, useState, useEffect, useCallback, memo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 
 // Reusable vector to avoid allocations in useFrame
 const _worldPos = new THREE.Vector3()
+
+/**
+ * Pulsing Hand Icon Component
+ * Shows a hand icon that scales in and out to indicate interactivity
+ * Uses Html component for proper emoji rendering
+ */
+function HandIcon({ position, isVisible }) {
+  const [scale, setScale] = useState(1)
+  const timeRef = useRef(0)
+  
+  useFrame((_, delta) => {
+    if (!isVisible) return
+    
+    timeRef.current += delta * 3 // Speed of pulse
+    // Pulse scale between 0.8 and 1.2
+    const newScale = 1 + Math.sin(timeRef.current) * 0.2
+    setScale(newScale)
+  })
+  
+  if (!isVisible) return null
+  
+  return (
+    <Html
+      position={[position[0], position[1] + 0.5, position[2]]}
+      center
+      distanceFactor={8}
+      occlude={false}
+      style={{
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '48px',
+          height: '48px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          transform: `scale(${scale})`,
+          transition: 'transform 0.05s ease-out',
+        }}
+      >
+        <span style={{ fontSize: '28px', userSelect: 'none' }}>👆</span>
+      </div>
+    </Html>
+  )
+}
 
 /**
  * ClickableMesh Component
@@ -15,8 +66,10 @@ const _worldPos = new THREE.Vector3()
  * @param {function} onClick - Callback when mesh is clicked while player is near
  * @param {function} onProximityChange - Callback when player enters/exits proximity
  * @param {object} playerRef - Reference to the player's rigid body
+ * @param {boolean} showHandIcon - Whether to show hand icon when nearby (default: true)
+ * @param {boolean} hideIndicators - Hide all indicators (hand icon, outline) when modal is open
  */
-function ClickableMesh({ data, meshName, interactionDistance = 2, onClick, onProximityChange, playerRef }) {
+function ClickableMesh({ data, meshName, interactionDistance = 2, onClick, onProximityChange, playerRef, showHandIcon = true, hideIndicators = false }) {
   const meshRef = useRef()
   const outlineRef = useRef()
   const [isNearby, setIsNearby] = useState(false)
@@ -137,17 +190,9 @@ function ClickableMesh({ data, meshName, interactionDistance = 2, onClick, onPro
         </mesh>
       )}
 
-      {/* Interaction prompt */}
-      {isNearby && (
-        <mesh position={[data.position[0], data.position[1] + 1.5, data.position[2]]}>
-          <planeGeometry args={[2, 0.5]} />
-          <meshBasicMaterial
-            color="#000000"
-            transparent
-            opacity={0.7}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+      {/* Pulsing hand icon when nearby (hidden when modal is open) */}
+      {showHandIcon && !hideIndicators && (
+        <HandIcon position={data.position} isVisible={isNearby} />
       )}
     </group>
   )

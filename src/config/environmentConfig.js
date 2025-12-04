@@ -25,10 +25,10 @@ export const SCENE_CONFIGS = {
 
 // Video plane configurations
 export const VIDEO_CONFIGS = [
-  {
-    planeName: 'plane013',
-    src: '/videos/opera-promo.mp4',
-  },
+  // {
+  //   planeName: 'plane013',
+  //   src: '/videos/opera-promo.mp4',
+  // },
   {
     planeName: 'plane010_1',
     src: '/videos/opera-promo.mp4',

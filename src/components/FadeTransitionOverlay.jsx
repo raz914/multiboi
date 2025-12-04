@@ -134,7 +134,7 @@ function FadeTransitionOverlay({
           {/* Selfie image display */}
           <div className="relative w-full h-full max-w-4xl max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl">
             <img 
-              src="/selfie.jpg" 
+              src="images/selfie.jpg" 
               alt="Selfie" 
               className="w-full h-full object-contain bg-black"
             />

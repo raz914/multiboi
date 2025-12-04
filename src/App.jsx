@@ -52,7 +52,7 @@ const CAMERA_CONFIGS = {
   },
 }
 
-function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive, pendingTeleport, onTeleportComplete, hdrTexture, isFormCompleted }) {
+function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive, pendingTeleport, onTeleportComplete, hdrTexture, isFormCompleted, isMobile, iframeOpen }) {
   const playerRef = useRef()
   const spawnConfig = useMemo(() => SPAWN_CONFIGS[currentScene] || SPAWN_CONFIGS.opera, [currentScene])
   const playerPosition = spawnConfig.position
@@ -134,8 +134,8 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
 
   return (
     <>
-      {/* HDR Background - only show when form is completed */}
-      {isFormCompleted && (
+      {/* HDR Background - only show when form is completed and NOT on mobile (HDR is expensive) */}
+      {isFormCompleted && !isMobile && (
         <HDRBackground texture={hdrTexture} applyAsEnvironment={false} useFallback={true} />
       )}
 
@@ -161,6 +161,7 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
               onTriggerActivate={onTriggerActivate}
               triggerOverlayActive={triggerOverlayActive}
               playerRef={playerRef}
+              iframeOpen={iframeOpen}
             />
           </Suspense>
 
@@ -185,15 +186,29 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
   )
 }
 
+// Mobile detection helper
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) ||
+    ('ontouchstart' in window && navigator.maxTouchPoints > 1)
+}
+
 function App() {
-  // Preload HDR before scene renders
-  const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload('/hdr/outsideOpera.hdr')
+  // Detect mobile device once on mount
+  const [isMobile] = useState(() => isMobileDevice())
+  
+  // Preload HDR before scene renders - skip for mobile
+  const { texture: hdrTexture, isLoading: hdrLoading, error: hdrError } = useHDRPreload(
+    isMobile ? null : '/hdr/outsideOpera.hdr' // Skip HDR loading on mobile
+  )
   
   // Loading and scene states
   const [coinData, setCoinData] = useState({ collected: 0, total: 0 })
   const [currentScene, setCurrentScene] = useState('opera')
   const [sceneReady, setSceneReady] = useState(false)
-  const [isPerformanceMode, setPerformanceMode] = useState(false)
+  // Force performance mode on mobile, otherwise start adaptive
+  const [isPerformanceMode, setPerformanceMode] = useState(() => isMobileDevice())
   const [iframeModal, setIframeModal] = useState({ isOpen: false, url: '', title: '' })
   const [nearbyInteraction, setNearbyInteraction] = useState({ meshName: null, type: null, message: null })
   
@@ -341,21 +356,29 @@ function App() {
       {/* 3D Canvas - always render in background */}
       <Canvas
         camera={{ position: [5, 2, 5], fov: 80, far: 500 }}
-        shadows={!isPerformanceMode}
-        dpr={isPerformanceMode ? 1 : [1, 1.8]}
+        shadows={!isPerformanceMode && !isMobile}
+        dpr={isMobile ? [0.75, 1] : (isPerformanceMode ? 1 : [1, 1.5])}
         gl={{ 
-          antialias: !isPerformanceMode,
+          antialias: !isMobile && !isPerformanceMode,
           powerPreference: 'high-performance',
           alpha: false,
-          stencil: false
+          stencil: false,
+          depth: true,
+          preserveDrawingBuffer: false,
+          failIfMajorPerformanceCaveat: false
         }}
+        frameloop="always"
         onCreated={({ gl, scene }) => {
           scene.background = new THREE.Color(0x87CEEB)
+          // Mobile-specific WebGL optimizations
+          if (isMobile) {
+            gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+          }
         }}
       >
         <PerformanceMonitor
           onDecline={() => setPerformanceMode(true)}
-          onIncline={() => setPerformanceMode(false)}
+          onIncline={() => !isMobile && setPerformanceMode(false)} // Don't exit performance mode on mobile
         >
           <AdaptiveDpr pixelated />
           <AdaptiveEvents />
@@ -374,6 +397,8 @@ function App() {
             onTeleportComplete={handleTeleportComplete}
             hdrTexture={hdrTexture}
             isFormCompleted={isFormCompleted}
+            isMobile={isMobile}
+            iframeOpen={iframeModal.isOpen}
           />
         </PerformanceMonitor>
       </Canvas>
