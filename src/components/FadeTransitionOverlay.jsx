@@ -117,7 +117,7 @@ function FadeTransitionOverlay({
         </div>
       )}
 
-      {/* Selfie mode - camera view */}
+      {/* Selfie mode - display selfie image */}
       {phase === 'content' && type === 'selfie' && !iframeUrl && (
         <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8 animate-fadeIn">
           {/* Close button */}
@@ -131,16 +131,13 @@ function FadeTransitionOverlay({
             </svg>
           </button>
 
-          {/* Selfie placeholder - you can add camera functionality here */}
-          <div className="relative w-full h-full max-w-4xl max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-900 to-gray-800 flex flex-col items-center justify-center">
-            <div className="text-white text-center p-8">
-              <svg className="w-24 h-24 mx-auto mb-6 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <h2 className="text-2xl font-bold mb-2">Selfie Mode</h2>
-              <p className="text-white/60">Camera functionality coming soon!</p>
-            </div>
+          {/* Selfie image display */}
+          <div className="relative w-full h-full max-w-4xl max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl">
+            <img 
+              src="/selfie.jpg" 
+              alt="Selfie" 
+              className="w-full h-full object-contain bg-black"
+            />
           </div>
         </div>
       )}

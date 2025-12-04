@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 import { useInput } from '../context/InputContext.jsx'
 
 const BASE_RADIUS = 56
+const DEFAULT_SENSITIVITY = 1
 
-function CameraJoystick() {
+function CameraJoystick({ sensitivity = DEFAULT_SENSITIVITY }) {
   const { isTouchInterface, setCameraRotation } = useInput()
   const containerRef = useRef(null)
   const knobRef = useRef(null)
@@ -52,9 +53,10 @@ function CameraJoystick() {
       const applyDeadzone = (value) => (Math.abs(value) < 0.08 ? 0 : value)
 
       // x controls horizontal rotation (theta), y controls vertical rotation (phi)
+      // Apply sensitivity multiplier to scale rotation speed
       setCameraRotation({
-        x: applyDeadzone(normalizedX),
-        y: applyDeadzone(normalizedY),
+        x: applyDeadzone(normalizedX) * sensitivity,
+        y: applyDeadzone(normalizedY) * sensitivity,
       })
     }
 

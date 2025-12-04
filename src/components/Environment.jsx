@@ -19,6 +19,7 @@ import {
   VIDEO_PLANE_NAMES_LOWER,
   CLICKABLE_MESHES_LOWER,
   TRIGGER_MESHES_LOWER,
+  NO_COLLIDER_MESHES_LOWER,
 } from '../config/environmentConfig'
 import {
   OPERA_INSIDE_TRIGGER_MESHES,
@@ -128,6 +129,12 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
         return
       }
       
+      // Mark no-collider meshes for removal (posters, planes, etc. for performance)
+      if (NO_COLLIDER_MESHES_LOWER.includes(childName)) {
+        meshesToRemove.push(child)
+        return
+      }
+      
       // Hide other interactive meshes (coins, portals, clickables, video planes)
       if (
         VIDEO_PLANE_NAMES_LOWER.includes(childName) ||
@@ -155,7 +162,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
     setDisplayScene(clone)
   }, [originalScene])
 
-  // Create a separate scene for trees (visual only)
+  // Create a separate scene for trees and no-collider meshes (visual only, no physics)
   useEffect(() => {
     if (!originalScene) {
       setTreeScene(null)
@@ -168,8 +175,11 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
       child.matrixAutoUpdate = false
       
       const childName = child.name.toLowerCase()
-      // Only keep trees visible
-      if (!childName.includes('tree')) {
+      // Only keep trees and no-collider meshes visible
+      const isTree = childName.includes('tree')
+      const isNoColliderMesh = NO_COLLIDER_MESHES_LOWER.includes(childName)
+      
+      if (!isTree && !isNoColliderMesh) {
         child.visible = false
       }
     })

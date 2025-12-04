@@ -91,8 +91,19 @@ export const getInteractiveConfig = (meshName) => {
   return INTERACTIVE_OBJECTS.posters // Default fallback
 }
 
+// Meshes to exclude from collision for performance (no colliders)
+export const NO_COLLIDER_MESHES = [
+  // Posters
+  'cube029', 'cube028', 'cube027', 'cube026', 'cube025', 'cube024', 'cube020',
+  // Additional meshes
+  'Screenshot_2025-11-03_085549png002',
+  'plane003',
+  'plane004',
+]
+
 // Pre-computed lowercase arrays for faster lookup
 export const VIDEO_PLANE_NAMES_LOWER = VIDEO_CONFIGS.map(config => config.planeName.toLowerCase())
 export const CLICKABLE_MESHES_LOWER = CLICKABLE_MESHES.map(m => m.toLowerCase())
 export const TRIGGER_MESHES_LOWER = TRIGGER_MESHES.map(m => m.toLowerCase())
+export const NO_COLLIDER_MESHES_LOWER = NO_COLLIDER_MESHES.map(m => m.toLowerCase())
 
