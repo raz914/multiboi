@@ -355,7 +355,7 @@ function App() {
     <div className="w-screen h-screen bg-gray-900">
       {/* 3D Canvas - always render in background */}
       <Canvas
-        camera={{ position: [5, 2, 5], fov: 80, far: 500 }}
+        camera={{ position: [5, 2, 5], fov: 65, far: 500 }}
         shadows={!isPerformanceMode && !isMobile}
         dpr={isMobile ? [0.75, 1] : (isPerformanceMode ? 1 : [1, 1.5])}
         gl={{ 

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useInput } from '../context/InputContext.jsx'
 
 const BASE_RADIUS = 56
-const DEFAULT_SENSITIVITY = 1
+const DEFAULT_SENSITIVITY = 0.17
 
 function CameraJoystick({ sensitivity = DEFAULT_SENSITIVITY }) {
   const { isTouchInterface, setCameraRotation } = useInput()
