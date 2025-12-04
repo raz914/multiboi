@@ -23,7 +23,7 @@ import WelcomeScreen from './components/WelcomeScreen'
     
 const SPAWN_CONFIGS = {
   opera: {
-    position: [0, 3, -11.1],
+    position: [0, 0.7, -11.1],
     rotation: 0, // Facing forward (radians)
   },
   reception: {

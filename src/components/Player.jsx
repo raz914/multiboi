@@ -140,7 +140,7 @@ const Player = forwardRef(({ position = [0, 0, 0], rotation = 0, onReady, isActi
     const character = playerRef.current
     if (!body || !character) return
 
-    const moveSpeed = keys.shift ? 4 : 2.3
+    const moveSpeed = keys.shift ? 4 : 3
 
     // Get joystick input
     const joystickMovement = movementRef?.current ?? { x: 0, y: 0 }

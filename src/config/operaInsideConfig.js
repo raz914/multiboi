@@ -36,7 +36,7 @@ export const TELEPORT_DESTINATIONS = {
     name: 'Initial Position',
   },
   stage: {
-    position: [6.14, 1.5, -18], // Placeholder - user will provide custom position
+    position: [3, -0.75, -18], // Placeholder - user will provide custom position
     name: 'Stage Area',
   },
 }
