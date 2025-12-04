@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, memo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 
@@ -42,5 +42,5 @@ function Coin({ data, onCollect, disableAnimation = false }) {
   )
 }
 
-export default Coin
+export default memo(Coin)
 

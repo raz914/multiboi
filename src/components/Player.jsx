@@ -11,7 +11,7 @@ import { useInput } from '../context/InputContext'
 const SYNC_INTERVAL = 0.01
 const UP = new THREE.Vector3(0, 1, 0)
 
-const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, ref) => {
+const Player = forwardRef(({ position = [0, 0, 0], rotation = 0, onReady, isActive = true }, ref) => {
   const baseModel = useGLTF('/player/DefaultAvatar.glb')
   const fbx = useMemo(() => (baseModel?.scene ? cloneSkeleton(baseModel.scene) : null), [baseModel])
   const playerRef = useRef()
@@ -276,6 +276,7 @@ const Player = forwardRef(({ position = [0, 0, 0], onReady, isActive = true }, r
     <RigidBody
       ref={rigidBodyRef}
       position={position}
+      rotation={[0, rotation, 0]}
       enabledRotations={[false, true, false]}
       lockRotations={false}
       colliders={false}

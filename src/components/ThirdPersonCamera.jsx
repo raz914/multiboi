@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { useInput } from '../context/InputContext.jsx'
 
 const setVectorFromArray = (vector, array = []) => {
   const [x = 0, y = 0, z = 0] = array
@@ -17,10 +18,11 @@ function ThirdPersonCamera({
   maxPolarAngle = Math.PI / 2.1,
   rotationSensitivity = 0.0025,
   zoomSensitivity = 0.01,
-  
+  joystickRotationSpeed = 2.5, // Speed multiplier for joystick camera rotation
   touchRotationMultiplier = 3.0,
 }) {
   const { camera, gl } = useThree()
+  const { cameraRotationRef, isTouchInterface } = useInput()
 
   const spherical = useRef(new THREE.Spherical())
   const currentPosition = useRef(new THREE.Vector3())
@@ -31,20 +33,24 @@ function ThirdPersonCamera({
   const lastMouseY = useRef(0)
   const touchState = useRef({ active: false, lastX: 0, lastY: 0, identifier: null })
   
-  // Function to check if touch is on joystick area (bottom-left quadrant)
+  // Function to check if touch is on either joystick area (bottom-left for movement, bottom-right for camera)
   const isTouchOnJoystick = (touch) => {
     const x = touch.clientX
     const y = touch.clientY
     const windowWidth = window.innerWidth
     const windowHeight = window.innerHeight
     
-    // Joystick is in bottom-left corner (bottom-8 left-8)
+    // Joystick zones in bottom corners
     // Joystick size is ~112px + some padding for easier touch
-    // Consider left 200px and bottom 200px as joystick zone
     const joystickZoneWidth = Math.min(200, windowWidth * 0.35)
     const joystickZoneHeight = Math.min(200, windowHeight * 0.35)
     
-    return x < joystickZoneWidth && y > (windowHeight - joystickZoneHeight)
+    // Check left joystick (movement)
+    const isOnLeftJoystick = x < joystickZoneWidth && y > (windowHeight - joystickZoneHeight)
+    // Check right joystick (camera)
+    const isOnRightJoystick = x > (windowWidth - joystickZoneWidth) && y > (windowHeight - joystickZoneHeight)
+    
+    return isOnLeftJoystick || isOnRightJoystick
   }
 
   const tempOffset = useRef(new THREE.Vector3())
@@ -240,6 +246,22 @@ function ThirdPersonCamera({
 
   useFrame((state, delta) => {
     if (!target?.current) return
+
+    // Apply camera joystick rotation (only on touch interfaces)
+    if (isTouchInterface && cameraRotationRef?.current) {
+      const joystickInput = cameraRotationRef.current
+      if (Math.abs(joystickInput.x) > 0 || Math.abs(joystickInput.y) > 0) {
+        // Apply horizontal rotation (theta) - invert x for natural feel
+        spherical.current.theta -= joystickInput.x * joystickRotationSpeed * delta
+        // Apply vertical rotation (phi) - invert y for natural feel
+        spherical.current.phi -= joystickInput.y * joystickRotationSpeed * delta
+        spherical.current.phi = THREE.MathUtils.clamp(
+          spherical.current.phi,
+          minPolarAngle,
+          maxPolarAngle
+        )
+      }
+    }
 
     // Handle both RigidBody (translation()) and regular Object3D (position)
     let targetPos

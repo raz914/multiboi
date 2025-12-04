@@ -1,6 +1,9 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, memo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+
+// Reusable vector to avoid allocations in useFrame
+const _worldPos = new THREE.Vector3()
 
 /**
  * ClickableMesh Component
@@ -13,19 +16,12 @@ import * as THREE from 'three'
  * @param {function} onProximityChange - Callback when player enters/exits proximity
  * @param {object} playerRef - Reference to the player's rigid body
  */
-function ClickableMesh({ data, meshName, interactionDistance = 5, onClick, onProximityChange, playerRef }) {
+function ClickableMesh({ data, meshName, interactionDistance = 2, onClick, onProximityChange, playerRef }) {
   const meshRef = useRef()
   const outlineRef = useRef()
   const [isNearby, setIsNearby] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
-  // Debug: Log when component mounts
-  useEffect(() => {
-    console.log(`[ClickableMesh] ${meshName} mounted at position:`, data.position)
-    return () => {
-      console.log(`[ClickableMesh] ${meshName} unmounted`)
-    }
-  }, [meshName, data.position])
 
   // Update cursor style
   const updateCursor = useCallback((value) => {
@@ -41,50 +37,29 @@ function ClickableMesh({ data, meshName, interactionDistance = 5, onClick, onPro
 
     const playerPos = playerRef.current.translation()
     
-    // Get world position of mesh
-    const worldPos = new THREE.Vector3()
-    meshRef.current.getWorldPosition(worldPos)
+    // Get world position of mesh (reuse vector to avoid allocations)
+    meshRef.current.getWorldPosition(_worldPos)
 
     // Calculate 2D distance (horizontal only, ignoring Y-axis)
-    // This is more intuitive for wall-mounted objects
-    const distance2D = Math.sqrt(
-      Math.pow(playerPos.x - worldPos.x, 2) +
-      Math.pow(playerPos.z - worldPos.z, 2)
-    )
-
-    // Also calculate 3D distance for logging
-    const distance3D = Math.sqrt(
-      Math.pow(playerPos.x - worldPos.x, 2) +
-      Math.pow(playerPos.y - worldPos.y, 2) +
-      Math.pow(playerPos.z - worldPos.z, 2)
-    )
+    const dx = playerPos.x - _worldPos.x
+    const dz = playerPos.z - _worldPos.z
+    const distance2D = Math.sqrt(dx * dx + dz * dz)
 
     const nearby = distance2D <= interactionDistance
     if (nearby !== isNearby) {
-      console.log(`[ClickableMesh] ${meshName} proximity changed:`, {
-        distance2D: distance2D.toFixed(2),
-        distance3D: distance3D.toFixed(2),
-        nearby,
-        playerPos: [playerPos.x.toFixed(1), playerPos.y.toFixed(1), playerPos.z.toFixed(1)],
-        meshWorldPos: [worldPos.x.toFixed(1), worldPos.y.toFixed(1), worldPos.z.toFixed(1)],
-      })
       setIsNearby(nearby)
       onProximityChange?.(nearby, meshName)
     }
   })
 
-  // Handle pointer events (like SceneVideoPlane does)
+  // Handle pointer events
   const handlePointerDown = useCallback(
     (event) => {
       event.stopPropagation()
-    //   if (!isNearby) {
-    //     console.log(`[ClickableMesh] ${meshName} clicked but too far away`)
-    //     return
-    //   }
-      console.log(`[ClickableMesh] ${meshName} clicked!`)
+      if (!isNearby) return
       onClick?.()
     },
-    [isNearby, onClick, meshName]
+    [isNearby, onClick]
   )
 
   const handlePointerOver = useCallback(
@@ -122,10 +97,7 @@ function ClickableMesh({ data, meshName, interactionDistance = 5, onClick, onPro
     }
   }, [isNearby, isHovered])
 
-  if (!data) {
-    console.warn(`[ClickableMesh] ${meshName} has no data`)
-    return null
-  }
+  if (!data) return null
 
   return (
     <group>
@@ -181,5 +153,5 @@ function ClickableMesh({ data, meshName, interactionDistance = 5, onClick, onPro
   )
 }
 
-export default ClickableMesh
+export default memo(ClickableMesh)
 

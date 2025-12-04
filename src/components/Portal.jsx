@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useState } from 'react'
+import { useRef, useMemo, useEffect, useState, memo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import * as THREE from 'three'
@@ -28,7 +28,6 @@ function Portal({ data, onEnter, disableAnimation = false }) {
 
   const handleIntersection = () => {
     if (!hasTriggered && onEnter) {
-      console.log('[Portal] Player entered portal, target scene:', targetScene)
       setHasTriggered(true)
       onEnter(targetScene)
     }
@@ -50,5 +49,5 @@ function Portal({ data, onEnter, disableAnimation = false }) {
   )
 }
 
-export default Portal
+export default memo(Portal)
 

@@ -6,89 +6,65 @@ import Coin from './Coin'
 import Portal from './Portal'
 import SceneVideoPlane from './SceneVideoPlane'
 import ClickableMesh from './ClickableMesh'
-import TreeColliders from './TreeColliders'
+import TriggerZone from './TriggerZone'
 import CustomCollider from './CustomCollider'
 import CommentaryAvatar from './CommentaryAvatar'
 import useClickableObjects from '../hooks/useClickableObjects'
+import {
+  SCENE_CONFIGS,
+  VIDEO_CONFIGS,
+  CLICKABLE_MESHES,
+  TRIGGER_MESHES,
+  getInteractiveConfig,
+  VIDEO_PLANE_NAMES_LOWER,
+  CLICKABLE_MESHES_LOWER,
+  TRIGGER_MESHES_LOWER,
+} from '../config/environmentConfig'
+import {
+  OPERA_INSIDE_TRIGGER_MESHES,
+  OPERA_INSIDE_CLICKABLE_MESHES,
+  getOperaInsideInteractiveConfig,
+  OPERA_INSIDE_TRIGGER_MESHES_LOWER,
+  OPERA_INSIDE_CLICKABLE_MESHES_LOWER,
+  OPERA_INSIDE_VIDEO_CONFIGS,
+  OPERA_INSIDE_VIDEO_PLANE_NAMES_LOWER,
+} from '../config/operaInsideConfig'
 
 THREE.Cache.enabled = true
 
-const SCENE_CONFIGS = {
-  outside: {
-    path: '/environment/Friendhouse outside.glb',
-    name: 'Main Scene',
-  },
-  reception: {
-    path: '/environment/reception.glb',
-    name: 'Reception',
-  },
-  opera: {
-    path: '/environment/opera.glb',
-    name: 'Opera House',
-  },
-  operainside: {
-    path: '/environment/operainside.glb',
-    name: 'Inside Opera',
-  }
-}
-
+// Reusable THREE.js objects for performance
 const tempPosition = new THREE.Vector3()
 const tempQuaternion = new THREE.Quaternion()
 const tempScale = new THREE.Vector3()
 const tempBox = new THREE.Box3()
 const tempSize = new THREE.Vector3()
 
-const VIDEO_CONFIGS = [
-  {
-    planeName: 'plane013',
-    src: '/videos/opera-promo.mp4',
-  },
-  {
-    planeName: 'plane010_1',
-    src: '/videos/opera-promo.mp4', // You can change this to a different video
-  },
-]
-
-// Interactive objects configuration for opera scene
-const INTERACTIVE_OBJECTS = {
-  // Wall posters
-  posters: {
-    type: 'poster',
-    meshNames: ['cube029', 'cube028', 'cube027', 'cube026', 'cube025', 'cube024', 'cube020'],
-    url: 'https://globalchessleague.com/',
-    promptMessage: 'Click on wall poster to view content',
-  },
-  // Arcade machines (pac man)
-  arcade: {
-    type: 'arcade',
-    meshNames: ['pac_man_machine_automat_0004', 'pac_man_machine_automat_0003'], // Add your actual mesh names here
-    url: 'https://dart-hit.netlify.app/', // Classic Google Pac-Man game
-    promptMessage: 'Click on arcade machine to play',
-  },
-  // Room switch - transitions to inside opera scene
-  roomSwitch: {
-    type: 'scene_switch',
-    meshNames: ['room_swich'], // Note: mesh name has typo in GLB file
-    targetScene: 'operainside',
-    promptMessage: 'Press E to enter the Opera',
-  },
-}
-
-// Flatten all clickable mesh names for detection
-const CLICKABLE_MESHES = Object.values(INTERACTIVE_OBJECTS).flatMap(obj => obj.meshNames)
-
-// Helper function to get interactive object config by mesh name
-const getInteractiveConfig = (meshName) => {
-  const nameLower = meshName.toLowerCase()
-  for (const config of Object.values(INTERACTIVE_OBJECTS)) {
-    if (config.meshNames.some(name => nameLower.includes(name.toLowerCase()))) {
-      return config
+// Helper to get scene-specific config
+const getSceneConfig = (sceneName) => {
+  if (sceneName === 'operainside') {
+    return {
+      clickableMeshes: OPERA_INSIDE_CLICKABLE_MESHES,
+      triggerMeshes: OPERA_INSIDE_TRIGGER_MESHES,
+      clickableMeshesLower: OPERA_INSIDE_CLICKABLE_MESHES_LOWER,
+      triggerMeshesLower: OPERA_INSIDE_TRIGGER_MESHES_LOWER,
+      getConfig: getOperaInsideInteractiveConfig,
+      videoConfigs: OPERA_INSIDE_VIDEO_CONFIGS,
+      videoPlanNamesLower: OPERA_INSIDE_VIDEO_PLANE_NAMES_LOWER,
     }
   }
-  return INTERACTIVE_OBJECTS.posters // Default fallback
+  // Default to opera scene config
+  return {
+    clickableMeshes: CLICKABLE_MESHES,
+    triggerMeshes: TRIGGER_MESHES,
+    clickableMeshesLower: CLICKABLE_MESHES_LOWER,
+    triggerMeshesLower: TRIGGER_MESHES_LOWER,
+    getConfig: getInteractiveConfig,
+    videoConfigs: VIDEO_CONFIGS,
+    videoPlanNamesLower: VIDEO_PLANE_NAMES_LOWER,
+  }
 }
 
-function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, disableAnimations = false, onMeshClick, onProximityChange, playerRef }) {
+function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, disableAnimations = false, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive = false, playerRef }) {
   const sceneConfig = SCENE_CONFIGS[sceneName] || SCENE_CONFIGS.opera
   const gltf = useGLTF(sceneConfig.path)
   const originalScene = gltf?.scene
@@ -100,24 +76,21 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
   const [videoPlanes, setVideoPlanes] = useState([])
   const [treeScene, setTreeScene] = useState(null)
   const notifiedReadyRef = useRef(false)
-  const videoPlaneNamesLower = VIDEO_CONFIGS.map(config => config.planeName.toLowerCase())
 
-  // Extract clickable objects from the scene (only for opera scene)
+  // Get scene-specific configuration
+  const interactiveConfig = useMemo(() => getSceneConfig(sceneName), [sceneName])
+
+  // Extract clickable objects from the scene
   const clickableObjects = useClickableObjects(
-    sceneName === 'opera' ? originalScene : null,
-    CLICKABLE_MESHES
+    (sceneName === 'opera' || sceneName === 'operainside') ? originalScene : null,
+    interactiveConfig.clickableMeshes
   )
 
-  // Debug: Log clickable objects when they change
-  useEffect(() => {
-    console.log('[Environment] Clickable objects found:', clickableObjects.length)
-    clickableObjects.forEach((obj, index) => {
-      console.log(`[Environment] Clickable #${index}:`, {
-        name: obj.name,
-        position: obj.position,
-      })
-    })
-  }, [clickableObjects])
+  // Extract trigger objects from the scene
+  const triggerObjects = useClickableObjects(
+    (sceneName === 'opera' || sceneName === 'operainside') ? originalScene : null,
+    interactiveConfig.triggerMeshes
+  )
 
   useEffect(() => {
     notifiedReadyRef.current = false
@@ -133,6 +106,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
     const clone = originalScene.clone(true)
     let treeCount = 0
     const treesToRemove = []
+    const meshesToRemove = []
     
     clone.traverse((child) => {
       if (!child.isMesh) return
@@ -147,12 +121,22 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
         return
       }
       
+      // Mark trigger meshes for removal (they use sensor colliders, not trimesh)
+      // Check both opera and operainside trigger meshes
+      if (TRIGGER_MESHES_LOWER.includes(childName) || OPERA_INSIDE_TRIGGER_MESHES_LOWER.includes(childName)) {
+        meshesToRemove.push(child)
+        return
+      }
+      
+      // Hide other interactive meshes (coins, portals, clickables, video planes)
       if (
-        videoPlaneNamesLower.includes(childName) ||
+        VIDEO_PLANE_NAMES_LOWER.includes(childName) ||
+        OPERA_INSIDE_VIDEO_PLANE_NAMES_LOWER.includes(childName) ||
         childName.includes('coin') ||
         childName.includes('enter') ||
         childName.includes('exit') ||
-        CLICKABLE_MESHES.map(m => m.toLowerCase()).includes(childName)
+        CLICKABLE_MESHES_LOWER.includes(childName) ||
+        OPERA_INSIDE_CLICKABLE_MESHES_LOWER.includes(childName)
       ) {
         child.visible = false
       }
@@ -163,9 +147,10 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
       tree.parent?.remove(tree)
     })
     
-    if (treeCount > 0) {
-      console.log(`[Environment] Removed ${treeCount} trees from collision mesh`)
-    }
+    // Remove trigger meshes from the collision scene (they have their own sensor colliders)
+    meshesToRemove.forEach((mesh) => {
+      mesh.parent?.remove(mesh)
+    })
 
     setDisplayScene(clone)
   }, [originalScene])
@@ -218,8 +203,8 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
 
       const childName = child.name.toLowerCase()
 
-      // Check if this mesh is a video plane
-      const videoConfigIndex = videoPlaneNamesLower.findIndex(name => name === childName)
+      // Check if this mesh is a video plane (using scene-specific config)
+      const videoConfigIndex = interactiveConfig.videoPlanNamesLower.findIndex(name => name === childName)
       if (videoConfigIndex !== -1) {
         planeConfigs.push({
           id: child.uuid,
@@ -228,7 +213,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
           position: [tempPosition.x, tempPosition.y, tempPosition.z],
           quaternion: [tempQuaternion.x, tempQuaternion.y, tempQuaternion.z, tempQuaternion.w],
           scale: [tempScale.x, tempScale.y, tempScale.z],
-          videoSrc: VIDEO_CONFIGS[videoConfigIndex].src,
+          videoSrc: interactiveConfig.videoConfigs[videoConfigIndex].src,
         })
         return
       }
@@ -269,12 +254,7 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
     setEnterPortals(enterConfigs)
     setExitPortals(exitConfigs)
     setVideoPlanes(planeConfigs)
-
-    console.log('[Environment] Coins configured:', coinConfigs.length)
-    console.log('[Environment] Enter portals configured:', enterConfigs.length)
-    console.log('[Environment] Exit portals configured:', exitConfigs.length)
-    console.log('[Environment] Video planes configured:', planeConfigs.length)
-  }, [originalScene])
+  }, [originalScene, interactiveConfig])
 
   useEffect(() => {
     if (!displayScene || notifiedReadyRef.current) return
@@ -298,24 +278,34 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
   }
 
   const handleMeshClick = (meshName) => {
-    const config = getInteractiveConfig(meshName)
-    console.log('[Environment] Mesh clicked:', meshName, 'Type:', config.type)
+    const config = interactiveConfig.getConfig(meshName)
+    if (!config) return
     
-    // Handle scene switch type differently
     if (config.type === 'scene_switch' && config.targetScene) {
-      console.log('[Environment] Triggering scene switch to:', config.targetScene)
       onPortalEnter?.(config.targetScene)
       return
     }
     
-    // For other types, open the URL in iframe
     onMeshClick?.(config.url, meshName, config.type)
   }
 
   const handleProximityChange = (isNear, meshName) => {
-    const config = getInteractiveConfig(meshName)
-    console.log('[Environment] Proximity changed:', meshName, isNear, 'Type:', config.type)
+    const config = interactiveConfig.getConfig(meshName)
+    if (!config) return
     onProximityChange?.(isNear, meshName, config.type, config.promptMessage)
+  }
+
+  const handleTriggerEnter = (meshName) => {
+    const config = interactiveConfig.getConfig(meshName)
+    if (!config) return
+    
+    onTriggerActivate?.({
+      meshName,
+      type: config.type,
+      targetScene: config.targetScene,
+      targetPosition: config.targetPosition, // For teleport triggers
+      url: config.url,
+    })
   }
 
   const renderedScene = useMemo(() => displayScene, [displayScene])
@@ -329,17 +319,9 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
         </RigidBody>
       )}
 
-      {/* Trees rendered visually without collision */}
+      {/* Trees rendered visually without collision (no colliders for performance) */}
       {treeScene && (
         <primitive object={treeScene} />
-      )}
-
-      {/* Custom tree colliders with reduced radius */}
-      {originalScene && (
-        <TreeColliders 
-          scenePath={sceneConfig.path} 
-          radiusMultiplier={0.1}
-        />
       )}
 
       {videoPlanes.map((plane) => (
@@ -358,16 +340,27 @@ function Environment({ onCoinData, sceneName = 'opera', onPortalEnter, onReady, 
         <Portal key={portal.id} data={portal} onEnter={onPortalEnter} disableAnimation={disableAnimations} />
       ))}
 
-      {/* Clickable meshes (only in opera scene) */}
-      {sceneName === 'opera' && clickableObjects.map((obj) => (
+      {/* Clickable meshes (opera and operainside scenes) */}
+      {(sceneName === 'opera' || sceneName === 'operainside') && clickableObjects.map((obj) => (
         <ClickableMesh
           key={obj.id}
           data={obj}
           meshName={obj.name}
-          interactionDistance={10}
+          interactionDistance={3}
           onClick={() => handleMeshClick(obj.name)}
           onProximityChange={handleProximityChange}
           playerRef={playerRef}
+        />
+      ))}
+
+      {/* Trigger zones (opera and operainside scenes) - sensor colliders, not physical */}
+      {(sceneName === 'opera' || sceneName === 'operainside') && triggerObjects.map((obj) => (
+        <TriggerZone
+          key={obj.id}
+          data={obj}
+          meshName={obj.name}
+          onEnter={() => handleTriggerEnter(obj.name)}
+          disabled={triggerOverlayActive}
         />
       ))}
 

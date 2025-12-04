@@ -7,10 +7,12 @@ import Environment from './components/Environment'
 import Player from './components/Player'
 import ThirdPersonCamera from './components/ThirdPersonCamera'
 import MobileJoystick from './components/MobileJoystick'
+import CameraJoystick from './components/CameraJoystick'
 import LoadingScreen from './components/LoadingScreen'
 import CoinCounter from './components/CoinCounter'
 import IframeModal from './components/IframeModal'
 import InteractionPrompt from './components/InteractionPrompt'
+import FadeTransitionOverlay from './components/FadeTransitionOverlay'
 import HDRBackground from './components/HDRBackground'
 import { useHDRPreload } from './hooks/useHDRPreload'
 
@@ -19,23 +21,77 @@ import UserForm from './components/UserForm'
 import InstructionScreen from './components/InstructionScreen'
 import WelcomeScreen from './components/WelcomeScreen'
     
-const SPAWN_POSITIONS = {
-  opera: [0, 3, -11.1],
-  reception: [0, 0.5, 5],
-  operainside: [6, 8, 5],
+const SPAWN_CONFIGS = {
+  opera: {
+    position: [0, 3, -11.1],
+    rotation: 0, // Facing forward (radians)
+  },
+  reception: {
+    position: [0, 0.5, 5],
+    rotation: 0,
+  },
+  operainside: {
+    position: [6, 8, 5],
+    rotation: Math.PI, // 180 degrees - facing opposite direction
+  },
 }
 
-function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, hdrTexture, isFormCompleted }) {
+// Camera configurations per scene
+const CAMERA_CONFIGS = {
+  opera: {
+    offset: [0, 5, -10],
+    lookAtOffset: [0, 1, 0],
+  },
+  reception: {
+    offset: [0, 5, -10],
+    lookAtOffset: [0, 1, 0],
+  },
+  operainside: {
+    offset: [0, 5, 10],      // Closer camera for indoor scene
+    lookAtOffset: [0, 1, 0],
+  },
+}
+
+function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, isPerformanceMode, onMeshClick, onProximityChange, onTriggerActivate, triggerOverlayActive, pendingTeleport, onTeleportComplete, hdrTexture, isFormCompleted }) {
   const playerRef = useRef()
-  const playerPosition = useMemo(() => SPAWN_POSITIONS[currentScene] || SPAWN_POSITIONS.opera, [currentScene])
-  const cameraOffset = useMemo(() => [0, 5, -10], [])
-  const cameraLookAtOffset = useMemo(() => [0, 1, 0], [])
+  const spawnConfig = useMemo(() => SPAWN_CONFIGS[currentScene] || SPAWN_CONFIGS.opera, [currentScene])
+  const playerPosition = spawnConfig.position
+  const playerRotation = spawnConfig.rotation
+  const cameraConfig = useMemo(() => CAMERA_CONFIGS[currentScene] || CAMERA_CONFIGS.opera, [currentScene])
+  const cameraOffset = cameraConfig.offset
+  const cameraLookAtOffset = cameraConfig.lookAtOffset
   const [environmentReady, setEnvironmentReady] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
 
+  // Handle teleportation when pendingTeleport changes
+  useEffect(() => {
+    if (pendingTeleport && playerRef.current) {
+      const [x, y, z] = pendingTeleport
+      playerRef.current.setTranslation({ x, y, z }, true)
+      playerRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true) // Reset velocity
+      onTeleportComplete?.()
+    }
+  }, [pendingTeleport, onTeleportComplete])
+
+  // Expose player to window for debugging
+  useEffect(() => {
+    window.player = playerRef.current
+    window.getPlayerPosition = () => {
+      if (playerRef.current) {
+        const pos = playerRef.current.translation()
+        console.log(`Player Position: [${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}]`)
+        return [pos.x, pos.y, pos.z]
+      }
+      return null
+    }
+    return () => {
+      delete window.player
+      delete window.getPlayerPosition
+    }
+  }, [playerReady])
+
   const handlePortalEnter = useCallback(
     (targetScene) => {
-      console.log('[Scene] Portal entered, changing to:', targetScene)
       onSceneChange(targetScene)
     },
     [onSceneChange],
@@ -102,6 +158,8 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
               disableAnimations={isPerformanceMode}
               onMeshClick={onMeshClick}
               onProximityChange={onProximityChange}
+              onTriggerActivate={onTriggerActivate}
+              triggerOverlayActive={triggerOverlayActive}
               playerRef={playerRef}
             />
           </Suspense>
@@ -111,6 +169,7 @@ function Scene({ onCoinData, currentScene, onSceneChange, onSceneReadyChange, is
               key={`player-${currentScene}`}
               ref={playerRef}
               position={playerPosition}
+              rotation={playerRotation}
               onReady={handlePlayerReady}
               isActive={environmentReady}
             />
@@ -137,6 +196,15 @@ function App() {
   const [isPerformanceMode, setPerformanceMode] = useState(false)
   const [iframeModal, setIframeModal] = useState({ isOpen: false, url: '', title: '' })
   const [nearbyInteraction, setNearbyInteraction] = useState({ meshName: null, type: null, message: null })
+  
+  // Trigger overlay state (for fade transitions)
+  const [triggerOverlay, setTriggerOverlay] = useState({ 
+    isActive: false, 
+    type: null, 
+    url: null, 
+    targetScene: null,
+    targetPosition: null
+  })
   
   // Form flow states - FIXED: showLoading starts as false
   const [showForm, setShowForm] = useState(true)
@@ -230,6 +298,42 @@ function App() {
     }
   }, [])
 
+  // Handle trigger zone activation (fade overlay)
+  const handleTriggerActivate = useCallback((triggerData) => {
+    setTriggerOverlay({
+      isActive: true,
+      type: triggerData.type,
+      url: triggerData.url,
+      targetScene: triggerData.targetScene,
+      targetPosition: triggerData.targetPosition,
+    })
+  }, [])
+
+  // Handle fade overlay completion (for scene switches)
+  const handleTriggerComplete = useCallback((targetScene) => {
+    if (targetScene) {
+      setCurrentScene(targetScene)
+    }
+  }, [])
+
+  // Pending teleport position (passed to Scene to execute)
+  const [pendingTeleport, setPendingTeleport] = useState(null)
+
+  // Handle teleport - set pending position for Scene to execute
+  const handleTeleport = useCallback((targetPosition) => {
+    setPendingTeleport(targetPosition)
+  }, [])
+
+  // Called by Scene after teleport is complete
+  const handleTeleportComplete = useCallback(() => {
+    setPendingTeleport(null)
+  }, [])
+
+  // Handle fade overlay close
+  const handleTriggerClose = useCallback(() => {
+    setTriggerOverlay({ isActive: false, type: null, url: null, targetScene: null, targetPosition: null })
+  }, [])
+
   const shouldShowLoading = showLoading || (!assetsLoaded && isFormCompleted && !showForm && !showInstructions && !showWelcome)
 
   return (
@@ -264,6 +368,10 @@ function App() {
             isPerformanceMode={isPerformanceMode}
             onMeshClick={handleMeshClick}
             onProximityChange={handleProximityChange}
+            onTriggerActivate={handleTriggerActivate}
+            triggerOverlayActive={triggerOverlay.isActive}
+            pendingTeleport={pendingTeleport}
+            onTeleportComplete={handleTeleportComplete}
             hdrTexture={hdrTexture}
             isFormCompleted={isFormCompleted}
           />
@@ -293,6 +401,7 @@ function App() {
       {isFormCompleted && !showForm && !showInstructions && !showWelcome && !shouldShowLoading && (
         <>
           <MobileJoystick />
+          <CameraJoystick />
           {coinData.total > 0 && <CoinCounter collected={coinData.collected} total={coinData.total} />}
           
           <InteractionPrompt 
@@ -300,12 +409,24 @@ function App() {
             message={nearbyInteraction.message || 'Press E to interact'} 
           />
           
-          {/* Iframe Modal */}
+          {/* Iframe Modal for clickable meshes */}
           <IframeModal
             isOpen={iframeModal.isOpen}
             onClose={handleCloseIframe}
             url={iframeModal.url}
             title={iframeModal.title}
+          />
+
+          {/* Fade Transition Overlay for trigger zones */}
+          <FadeTransitionOverlay
+            isActive={triggerOverlay.isActive}
+            iframeUrl={triggerOverlay.url}
+            type={triggerOverlay.type}
+            targetScene={triggerOverlay.targetScene}
+            targetPosition={triggerOverlay.targetPosition}
+            onComplete={handleTriggerComplete}
+            onTeleport={handleTeleport}
+            onClose={handleTriggerClose}
           />
         </>
       )}

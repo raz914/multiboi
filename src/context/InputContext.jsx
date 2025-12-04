@@ -1,19 +1,40 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 const defaultMovement = { x: 0, y: 0 }
+const defaultCameraRotation = { x: 0, y: 0 }
 
 const InputContext = createContext({
   movementRef: { current: defaultMovement },
   setMovement: () => {},
+  cameraRotationRef: { current: defaultCameraRotation },
+  setCameraRotation: () => {},
   isTouchInterface: false,
 })
 
 export function InputProvider({ children }) {
   const movementRef = useRef({ ...defaultMovement })
+  const cameraRotationRef = useRef({ ...defaultCameraRotation })
   const [isTouchInterface, setIsTouchInterface] = useState(false)
 
   const setMovement = useCallback((next) => {
     const target = movementRef.current
+    if (!next) {
+      target.x = 0
+      target.y = 0
+      return
+    }
+
+    const clamp = (value) => {
+      if (Number.isNaN(value)) return 0
+      return Math.max(-1, Math.min(1, value))
+    }
+
+    target.x = clamp(next.x)
+    target.y = clamp(next.y)
+  }, [])
+
+  const setCameraRotation = useCallback((next) => {
+    const target = cameraRotationRef.current
     if (!next) {
       target.x = 0
       target.y = 0
@@ -58,9 +79,11 @@ export function InputProvider({ children }) {
     () => ({
       movementRef,
       setMovement,
+      cameraRotationRef,
+      setCameraRotation,
       isTouchInterface,
     }),
-    [setMovement, isTouchInterface]
+    [setMovement, setCameraRotation, isTouchInterface]
   )
 
   return <InputContext.Provider value={contextValue}>{children}</InputContext.Provider>

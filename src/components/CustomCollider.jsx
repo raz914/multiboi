@@ -1,5 +1,5 @@
 import { RigidBody, CuboidCollider, BallCollider, CylinderCollider } from '@react-three/rapier'
-import { useMemo } from 'react'
+import { useMemo, useEffect, memo } from 'react'
 import * as THREE from 'three'
 
 /**
@@ -93,14 +93,14 @@ function CustomCollider({
     }
   }, [type, actualArgs])
 
-  console.log(`[CustomCollider] ${name} created:`, {
-    type,
-    position,
-    rotation,
-    visible,
-    args: actualArgs,
-    colliderArgs,
-  })
+  // Debug log only on mount
+  useEffect(() => {
+    console.log(`[CustomCollider] ${name} mounted:`, {
+      type,
+      position,
+      visible,
+    })
+  }, []) // Empty deps - only log once on mount
 
   return (
     <RigidBody
@@ -143,5 +143,5 @@ function CustomCollider({
   )
 }
 
-export default CustomCollider
+export default memo(CustomCollider)
 
