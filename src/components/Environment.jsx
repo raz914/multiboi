@@ -39,10 +39,7 @@ const tempBox = new THREE.Box3()
 const tempSize = new THREE.Vector3()
 
 const VIDEO_CONFIGS = [
-  {
-    planeName: 'plane013',
-    src: '/videos/opera-promo.mp4',
-  },
+
   {
     planeName: 'plane010_1',
     src: '/videos/opera-promo.mp4', // You can change this to a different video
